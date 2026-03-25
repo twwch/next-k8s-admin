@@ -1,15 +1,17 @@
 'use client';
 
-import { Form, Input, Select, Button, Card, message } from 'antd';
+import { Form, Input, Select, Button, Card, message, Switch, Divider, Typography } from 'antd';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 const { TextArea } = Input;
+const { Text } = Typography;
 
 export default function NewClusterPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [authType, setAuthType] = useState('token');
+  const [notifyEnabled, setNotifyEnabled] = useState(false);
 
   const handleSubmit = async (values: any) => {
     setLoading(true);
@@ -17,7 +19,7 @@ export default function NewClusterPage() {
       const res = await fetch('/api/clusters', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(values),
+        body: JSON.stringify({ ...values, notifyEnabled }),
       });
       if (res.ok) {
         message.success('集群添加成功');
@@ -56,16 +58,35 @@ export default function NewClusterPage() {
         )}
         {authType === 'kubeconfig' && (
           <Form.Item name="kubeconfig" label="Kubeconfig" rules={[{ required: true }]}>
-            <TextArea rows={8} placeholder="粘贴 kubeconfig YAML 内容" />
+            <TextArea rows={8} placeholder="粘贴 kubeconfig YAML 内容" style={{ fontFamily: 'monospace', fontSize: 12 }} />
           </Form.Item>
         )}
         <Form.Item name="caCert" label="CA 证书 (可选)">
-          <TextArea rows={4} placeholder="CA 证书 PEM 内容" />
+          <TextArea rows={4} placeholder="CA 证书 PEM 内容" style={{ fontFamily: 'monospace', fontSize: 12 }} />
         </Form.Item>
         <Form.Item name="description" label="描述">
           <TextArea rows={2} />
         </Form.Item>
-        <Form.Item>
+
+        <Divider>发版通知</Divider>
+
+        <Form.Item label="启用飞书通知">
+          <Switch checked={notifyEnabled} onChange={setNotifyEnabled} />
+          <Text type="secondary" style={{ marginLeft: 12, fontSize: 12 }}>
+            发布/回滚时自动推送通知到飞书群
+          </Text>
+        </Form.Item>
+        {notifyEnabled && (
+          <Form.Item
+            name="webhookUrl"
+            label="飞书 Webhook 地址"
+            rules={[{ required: true, message: '启用通知时必须填写 Webhook 地址' }]}
+          >
+            <Input placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/xxx" />
+          </Form.Item>
+        )}
+
+        <Form.Item style={{ marginTop: 24 }}>
           <Button type="primary" htmlType="submit" loading={loading}>添加</Button>
           <Button style={{ marginLeft: 8 }} onClick={() => router.back()}>取消</Button>
         </Form.Item>

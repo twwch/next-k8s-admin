@@ -115,6 +115,32 @@ export async function updateResource(clusterId: string, kind: ResourceKind, name
   }
 }
 
+/**
+ * Apply resource: create if not exists, update if exists (like kubectl apply)
+ */
+export async function applyResource(clusterId: string, kind: ResourceKind, body: any, namespace?: string) {
+  const name = body?.metadata?.name;
+  if (!name) throw new Error('Resource must have metadata.name');
+
+  try {
+    // Try to get existing resource
+    const existing = await getResource(clusterId, kind, name, namespace) as any;
+    // Carry over resourceVersion for update (required by K8s API)
+    if (existing?.metadata?.resourceVersion) {
+      if (!body.metadata) body.metadata = {};
+      body.metadata.resourceVersion = existing.metadata.resourceVersion;
+    }
+    return await updateResource(clusterId, kind, name, body, namespace);
+  } catch (err: any) {
+    // 404 = not found, create it
+    const statusCode = err?.statusCode || err?.response?.statusCode || err?.code;
+    if (statusCode === 404 || err?.message?.includes('not found')) {
+      return await createResource(clusterId, kind, body, namespace);
+    }
+    throw err;
+  }
+}
+
 export async function deleteResource(clusterId: string, kind: ResourceKind, name: string, namespace?: string) {
   const clients = await getK8sClient(clusterId);
   switch (kind) {

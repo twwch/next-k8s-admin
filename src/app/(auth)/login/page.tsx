@@ -3,8 +3,7 @@ import { useState } from 'react';
 import { Card, Form, Input, Button, Tabs, message, Typography } from 'antd';
 import { UserOutlined, LockOutlined, MailOutlined } from '@ant-design/icons';
 import { useRouter } from 'next/navigation';
-
-const { Title } = Typography;
+import Logo from '@/components/logo';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -42,7 +41,9 @@ export default function LoginPage() {
 
   return (
     <Card style={{ width: 420, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
-      <div style={{ textAlign: 'center', marginBottom: 24 }}><Title level={3}>K8s Admin</Title></div>
+      <div style={{ textAlign: 'center', marginBottom: 24, display: 'flex', justifyContent: 'center' }}>
+        <Logo size={42} />
+      </div>
       <Tabs centered items={[
         { key: 'password', label: '账号密码', children: (
           <Form onFinish={handlePasswordLogin} size="large">

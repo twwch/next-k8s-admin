@@ -19,6 +19,8 @@ export async function GET() {
     status: clusters.status,
     lastHealthCheckAt: clusters.lastHealthCheckAt,
     description: clusters.description,
+    webhookUrl: clusters.webhookUrl,
+    notifyEnabled: clusters.notifyEnabled,
     createdAt: clusters.createdAt,
   }).from(clusters).orderBy(desc(clusters.createdAt));
 
@@ -30,7 +32,7 @@ export async function POST(req: NextRequest) {
   if (!auth) return NextResponse.json({ error: '未登录' }, { status: 401 });
 
   const body = await req.json();
-  const { name, displayName, apiServerUrl, authType, kubeconfig, saToken, caCert, description } = body;
+  const { name, displayName, apiServerUrl, authType, kubeconfig, saToken, caCert, description, webhookUrl, notifyEnabled } = body;
 
   const [cluster] = await db.insert(clusters).values({
     name,
@@ -41,6 +43,8 @@ export async function POST(req: NextRequest) {
     saToken: saToken ? encrypt(saToken) : null,
     caCert,
     description,
+    webhookUrl: webhookUrl || null,
+    notifyEnabled: notifyEnabled || false,
     createdBy: auth.user.id,
   }).returning();
 

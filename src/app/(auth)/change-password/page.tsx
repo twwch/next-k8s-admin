@@ -3,8 +3,7 @@ import { useState } from 'react';
 import { Card, Form, Input, Button, message, Typography, Alert } from 'antd';
 import { LockOutlined } from '@ant-design/icons';
 import { useRouter } from 'next/navigation';
-
-const { Title } = Typography;
+import Logo from '@/components/logo';
 
 export default function ChangePasswordPage() {
   const router = useRouter();
@@ -23,7 +22,10 @@ export default function ChangePasswordPage() {
 
   return (
     <Card style={{ width: 420, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
-      <div style={{ textAlign: 'center', marginBottom: 24 }}><Title level={3}>修改密码</Title></div>
+      <div style={{ textAlign: 'center', marginBottom: 24, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+        <Logo size={42} />
+        <span style={{ fontSize: 14, color: '#666' }}>修改密码</span>
+      </div>
       <Alert message="首次登录需要修改密码" type="warning" showIcon style={{ marginBottom: 24 }} />
       <Form onFinish={handleSubmit} size="large">
         <Form.Item name="currentPassword" rules={[{ required: true, message: '请输入当前密码' }]}><Input.Password prefix={<LockOutlined />} placeholder="当前密码" /></Form.Item>

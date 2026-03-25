@@ -121,7 +121,7 @@ export default function RolesPage() {
         onCancel={() => { setAddOpen(false); form.resetFields(); setPermissions({}); }}
         onOk={() => form.submit()}
         width={700}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form form={form} layout="vertical" onFinish={handleAdd}>
           <Form.Item name="name" label="角色标识" rules={[{ required: true }]}>

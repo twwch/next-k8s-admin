@@ -2,10 +2,10 @@
 
 import { useState } from 'react';
 import { ProLayout } from '@ant-design/pro-layout';
-import { ConfigProvider, Dropdown, Avatar } from 'antd';
+import { ConfigProvider, Dropdown, Avatar, App } from 'antd';
 import {
   DashboardOutlined, ClusterOutlined, CloudServerOutlined,
-  ApiOutlined, SettingOutlined, FileTextOutlined,
+  SettingOutlined, FileTextOutlined,
   UserOutlined, SafetyOutlined, AuditOutlined,
   AppstoreOutlined, RocketOutlined, DatabaseOutlined,
   GlobalOutlined, LogoutOutlined,
@@ -13,6 +13,7 @@ import {
 import { useRouter, usePathname } from 'next/navigation';
 import zhCN from 'antd/locale/zh_CN';
 import ClusterSelector from '@/components/cluster-selector';
+import Logo from '@/components/logo';
 import { useRequest } from 'ahooks';
 
 const menuData = [
@@ -59,14 +60,7 @@ const menuData = [
       },
     ],
   },
-  {
-    name: '应用发布',
-    icon: <ApiOutlined />,
-    children: [
-      { path: '/apps/templates', name: '应用模板', icon: <FileTextOutlined /> },
-      { path: '/apps/releases', name: '发布记录', icon: <RocketOutlined /> },
-    ],
-  },
+  { path: '/apps/releases', name: '发布记录', icon: <FileTextOutlined /> },
   {
     name: '系统管理',
     icon: <SettingOutlined />,
@@ -96,16 +90,49 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   };
 
   return (
-    <ConfigProvider locale={zhCN}>
+    <ConfigProvider
+      locale={zhCN}
+      theme={{
+        token: {
+          colorPrimary: '#326CE5',
+          borderRadius: 6,
+        },
+      }}
+    >
+      <App>
       <ProLayout
         title="K8s Admin"
+        logo={<Logo size={28} showText={false} />}
         layout="mix"
-        navTheme="realDark"
+        navTheme="light"
         fixSiderbar
+        fixedHeader
         collapsed={collapsed}
         onCollapse={setCollapsed}
         location={{ pathname }}
         route={{ routes: menuData }}
+        token={{
+          header: {
+            colorBgHeader: '#fff',
+            colorHeaderTitle: '#1a1a1a',
+            colorTextMenu: '#595959',
+            colorTextMenuActive: '#326CE5',
+            colorTextMenuSelected: '#326CE5',
+            colorBgMenuItemSelected: 'rgba(50,108,229,0.06)',
+          },
+          sider: {
+            colorMenuBackground: '#fff',
+            colorTextMenu: '#595959',
+            colorTextMenuActive: '#326CE5',
+            colorTextMenuSelected: '#326CE5',
+            colorBgMenuItemSelected: 'rgba(50,108,229,0.08)',
+            colorTextMenuTitle: '#1a1a1a',
+            colorBgMenuItemHover: 'rgba(0,0,0,0.03)',
+          },
+          pageContainer: {
+            colorBgPageContainer: '#f5f7fa',
+          },
+        }}
         menuItemRender={(item, dom) => (
           <a onClick={() => item.path && router.push(item.path)}>{dom}</a>
         )}
@@ -119,17 +146,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               ],
             }}
           >
-            <span style={{ cursor: 'pointer', color: 'rgba(255,255,255,0.65)' }}>
-              <Avatar size="small" icon={<UserOutlined />} style={{ marginRight: 8 }} />
+            <span style={{ cursor: 'pointer', color: '#595959' }}>
+              <Avatar size="small" icon={<UserOutlined />} style={{ marginRight: 8, backgroundColor: '#326CE5' }} />
               {user?.username || '...'}
             </span>
           </Dropdown>,
         ]}
       >
-        <div style={{ padding: 24, minHeight: '100vh' }}>
+        <div style={{ padding: 24, minHeight: 'calc(100vh - 56px)' }}>
           {children}
         </div>
       </ProLayout>
+      </App>
     </ConfigProvider>
   );
 }

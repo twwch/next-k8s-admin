@@ -31,6 +31,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     authType: body.authType,
     caCert: body.caCert,
     description: body.description,
+    webhookUrl: body.webhookUrl ?? undefined,
+    notifyEnabled: body.notifyEnabled ?? undefined,
     updatedAt: new Date(),
   };
 

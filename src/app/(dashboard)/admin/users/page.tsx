@@ -56,7 +56,12 @@ export default function UsersPage() {
   };
 
   const handleDelete = async (id: string) => {
-    await fetch(`/api/admin/users/${id}`, { method: 'DELETE' });
+    const res = await fetch(`/api/admin/users/${id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const data = await res.json();
+      message.error(data.error || '删除失败');
+      return;
+    }
     message.success('已删除');
     refresh();
   };
@@ -103,9 +108,11 @@ export default function UsersPage() {
           >
             编辑
           </Button>
-          <Popconfirm title="确认删除此用户?" onConfirm={() => handleDelete(record.id)}>
-            <Button size="small" danger icon={<DeleteOutlined />}>删除</Button>
-          </Popconfirm>
+          {record.username !== 'admin' && (
+            <Popconfirm title="确认删除此用户?" onConfirm={() => handleDelete(record.id)}>
+              <Button size="small" danger icon={<DeleteOutlined />}>删除</Button>
+            </Popconfirm>
+          )}
         </Space>
       ),
     },
@@ -127,7 +134,7 @@ export default function UsersPage() {
         open={addOpen}
         onCancel={() => { setAddOpen(false); addForm.resetFields(); }}
         onOk={() => addForm.submit()}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form form={addForm} layout="vertical" onFinish={handleAdd}>
           <Form.Item name="username" label="用户名" rules={[{ required: true }]}>
@@ -155,7 +162,7 @@ export default function UsersPage() {
         open={!!editUser}
         onCancel={() => setEditUser(null)}
         onOk={() => editForm.submit()}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form form={editForm} layout="vertical" onFinish={handleEdit}>
           <Form.Item name="email" label="邮箱" rules={[{ required: true, type: 'email' }]}>

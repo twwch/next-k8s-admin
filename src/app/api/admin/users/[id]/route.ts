@@ -59,6 +59,13 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (!auth) return NextResponse.json({ error: '未登录' }, { status: 401 });
 
   const { id } = await params;
+
+  // Protect admin user from deletion
+  const [target] = await db.select({ username: users.username }).from(users).where(eq(users.id, id)).limit(1);
+  if (target?.username === 'admin') {
+    return NextResponse.json({ error: '超级管理员账户不允许删除' }, { status: 403 });
+  }
+
   const [deleted] = await db.delete(users).where(eq(users.id, id)).returning();
 
   if (deleted) {
