@@ -76,11 +76,31 @@ export default function PodTerminal({ open, onClose, clusterId, namespace, podNa
       return;
     }
 
-    const wsUrl = `${process.env.NEXT_PUBLIC_WS_URL}?token=${wsToken}`;
-    const ws = new WebSocket(wsUrl);
+    const wsUrl = process.env.NEXT_PUBLIC_WS_URL;
+    if (!wsUrl) {
+      setError('WebSocket 服务未配置 (NEXT_PUBLIC_WS_URL)');
+      term.write('\x1b[31m请启动 WebSocket 服务: npm run ws:dev\x1b[0m\r\n');
+      return;
+    }
+
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(`${wsUrl}?token=${wsToken}`);
+    } catch {
+      setError('WebSocket 连接失败，请确认 WS 服务已启动 (npm run ws:dev)');
+      return;
+    }
     wsRef.current = ws;
 
+    const connectTimeout = setTimeout(() => {
+      if (ws.readyState !== WebSocket.OPEN) {
+        setError('WebSocket 连接超时，请确认 WS 服务已启动 (npm run ws:dev)');
+        ws.close();
+      }
+    }, 5000);
+
     ws.onopen = () => {
+      clearTimeout(connectTimeout);
       ws.send(JSON.stringify({
         type: 'subscribe-exec',
         clusterId,
@@ -97,18 +117,20 @@ export default function PodTerminal({ open, onClose, clusterId, namespace, podNa
           term.write(msg.data);
         } else if (msg.type === 'error') {
           setError(msg.message);
+          term.write(`\r\n\x1b[31m${msg.message}\x1b[0m\r\n`);
         }
       } catch {
-        // Raw data
         term.write(event.data);
       }
     };
 
     ws.onerror = () => {
-      setError('WebSocket 连接失败');
+      clearTimeout(connectTimeout);
+      setError('WebSocket 连接失败，请确认 WS 服务已启动 (npm run ws:dev)');
     };
 
     ws.onclose = () => {
+      clearTimeout(connectTimeout);
       term.write('\r\n\x1b[31m[连接已关闭]\x1b[0m\r\n');
     };
 

@@ -1,7 +1,7 @@
 import { getK8sClient } from './client-manager';
 
 export type ResourceKind =
-  | 'namespaces' | 'pods' | 'deployments' | 'statefulsets' | 'daemonsets'
+  | 'namespaces' | 'pods' | 'deployments' | 'replicasets' | 'statefulsets' | 'daemonsets'
   | 'jobs' | 'cronjobs' | 'services' | 'ingresses'
   | 'configmaps' | 'secrets' | 'persistentvolumeclaims' | 'storageclasses'
   | 'nodes' | 'events';
@@ -22,6 +22,10 @@ export async function listResources(clusterId: string, kind: ResourceKind, names
       return namespace
         ? (await clients.apps.listNamespacedDeployment({ namespace })).items
         : (await clients.apps.listDeploymentForAllNamespaces()).items;
+    case 'replicasets':
+      return namespace
+        ? (await clients.apps.listNamespacedReplicaSet({ namespace })).items
+        : (await clients.apps.listReplicaSetForAllNamespaces()).items;
     case 'statefulsets':
       return namespace
         ? (await clients.apps.listNamespacedStatefulSet({ namespace })).items

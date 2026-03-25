@@ -2,20 +2,24 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
-import { Card, Descriptions, Table, Tag, Button, Space, Typography, Breadcrumb, Spin, Alert } from 'antd';
-import { ArrowLeftOutlined } from '@ant-design/icons';
+import {
+  Card, Descriptions, Table, Tag, Button, Space, Typography, Breadcrumb,
+  Spin, Alert, Popconfirm, message, Dropdown,
+} from 'antd';
+import {
+  ArrowLeftOutlined, EditOutlined, ReloadOutlined, RollbackOutlined,
+  DownOutlined, CodeOutlined, FileTextOutlined,
+} from '@ant-design/icons';
 import { useClusterStore } from '@/hooks/use-cluster';
+import { usePermissions } from '@/hooks/use-permissions';
+import ResourceDrawer from '@/components/resource-drawer';
 import PodLogViewer from '@/components/pod-log-viewer';
 import PodTerminal from '@/components/pod-terminal';
 
-const { Title } = Typography;
+const { Title, Text } = Typography;
 
 const phaseColors: Record<string, string> = {
-  Running: 'green',
-  Pending: 'gold',
-  Succeeded: 'blue',
-  Failed: 'red',
-  Unknown: 'default',
+  Running: 'green', Pending: 'gold', Succeeded: 'blue', Failed: 'red', Unknown: 'default',
 };
 
 function getAge(timestamp: string): string {
@@ -33,6 +37,7 @@ export default function DeploymentDetailPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { clusterId } = useClusterStore();
+  const permissions = usePermissions('deployments');
 
   const name = params.name as string;
   const namespace = searchParams.get('namespace') || 'default';
@@ -42,7 +47,10 @@ export default function DeploymentDetailPage() {
   const [loadingDeployment, setLoadingDeployment] = useState(true);
   const [loadingPods, setLoadingPods] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [restarting, setRestarting] = useState(false);
+  const [rollingBack, setRollingBack] = useState(false);
 
+  const [drawerState, setDrawerState] = useState<{ open: boolean; mode: 'view' | 'edit' | 'create' }>({ open: false, mode: 'view' });
   const [logState, setLogState] = useState<{ open: boolean; pod?: any }>({ open: false });
   const [termState, setTermState] = useState<{ open: boolean; pod?: any }>({ open: false });
 
@@ -59,8 +67,6 @@ export default function DeploymentDetailPage() {
       }
       const data = await res.json();
       setDeployment(data);
-
-      // Fetch pods filtered by label selector
       await fetchPods(data);
     } catch (err: any) {
       setError(err.message);
@@ -76,8 +82,6 @@ export default function DeploymentDetailPage() {
       const res = await fetch(`/api/k8s/${clusterId}/namespaces/${namespace}/pods`);
       if (!res.ok) return;
       const allPods: any[] = await res.json();
-
-      // Filter by label selector
       const matchLabels: Record<string, string> = dep?.spec?.selector?.matchLabels || {};
       const filtered = allPods.filter((pod: any) => {
         const podLabels: Record<string, string> = pod.metadata?.labels || {};
@@ -85,7 +89,7 @@ export default function DeploymentDetailPage() {
       });
       setPods(filtered);
     } catch {
-      // ignore pod fetch errors
+      // ignore
     } finally {
       setLoadingPods(false);
     }
@@ -95,70 +99,127 @@ export default function DeploymentDetailPage() {
     fetchDeployment();
   }, [clusterId, name, namespace]);
 
+  // Restart deployment (kubectl rollout restart)
+  const handleRestart = async () => {
+    if (!clusterId || !deployment) return;
+    setRestarting(true);
+    try {
+      // Patch the deployment with a restart annotation
+      const patch = JSON.parse(JSON.stringify(deployment));
+      if (!patch.spec.template.metadata) patch.spec.template.metadata = {};
+      if (!patch.spec.template.metadata.annotations) patch.spec.template.metadata.annotations = {};
+      patch.spec.template.metadata.annotations['kubectl.kubernetes.io/restartedAt'] = new Date().toISOString();
+
+      const res = await fetch(`/api/k8s/${clusterId}/namespaces/${namespace}/deployments/${name}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Change-Message': '重新部署 (Rollout Restart)',
+        },
+        body: JSON.stringify(patch),
+      });
+      if (res.ok) {
+        message.success('重新部署已触发');
+        setTimeout(fetchDeployment, 2000);
+      } else {
+        const d = await res.json().catch(() => ({}));
+        message.error(d.error || '重新部署失败');
+      }
+    } finally {
+      setRestarting(false);
+    }
+  };
+
+  // Rollback to previous revision
+  const handleRollback = async () => {
+    if (!clusterId || !deployment) return;
+    setRollingBack(true);
+    try {
+      // Get the deployment's revision history via ReplicaSets
+      const res = await fetch(`/api/k8s/${clusterId}/namespaces/${namespace}/replicasets`);
+      if (!res.ok) { message.error('获取 ReplicaSet 失败'); return; }
+      const allRS: any[] = await res.json();
+
+      // Filter RS owned by this deployment
+      const matchLabels = deployment.spec?.selector?.matchLabels || {};
+      const ownedRS = allRS
+        .filter((rs: any) => {
+          const rsLabels = rs.spec?.selector?.matchLabels || {};
+          return Object.entries(matchLabels).every(([k, v]) => rsLabels[k] === v);
+        })
+        .filter((rs: any) => rs.metadata?.annotations?.['deployment.kubernetes.io/revision'])
+        .sort((a: any, b: any) => {
+          const ra = parseInt(a.metadata.annotations['deployment.kubernetes.io/revision'] || '0');
+          const rb = parseInt(b.metadata.annotations['deployment.kubernetes.io/revision'] || '0');
+          return rb - ra;
+        });
+
+      if (ownedRS.length < 2) {
+        message.warning('没有可回滚的历史版本');
+        return;
+      }
+
+      // Previous version is the second newest RS
+      const previousRS = ownedRS[1];
+      const previousImage = previousRS.spec?.template?.spec?.containers?.[0]?.image || 'unknown';
+
+      // Update deployment with previous RS's template
+      const patch = JSON.parse(JSON.stringify(deployment));
+      patch.spec.template = previousRS.spec.template;
+
+      const updateRes = await fetch(`/api/k8s/${clusterId}/namespaces/${namespace}/deployments/${name}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Change-Message': `回滚到上一版本 (镜像: ${previousImage})`,
+        },
+        body: JSON.stringify(patch),
+      });
+      if (updateRes.ok) {
+        message.success(`已回滚到上一版本 (${previousImage})`);
+        setTimeout(fetchDeployment, 2000);
+      } else {
+        const d = await updateRes.json().catch(() => ({}));
+        message.error(d.error || '回滚失败');
+      }
+    } catch (err: any) {
+      message.error('回滚失败: ' + err.message);
+    } finally {
+      setRollingBack(false);
+    }
+  };
+
   const podContainers = (pod: any): string[] => {
     return (pod.spec?.containers || []).map((c: any) => c.name);
   };
 
   const podColumns = [
+    { title: '名称', dataIndex: ['metadata', 'name'], key: 'name' },
     {
-      title: '名称',
-      dataIndex: ['metadata', 'name'],
-      key: 'name',
-    },
-    {
-      title: '状态',
-      key: 'phase',
+      title: '状态', key: 'phase',
       render: (_: any, r: any) => {
         const phase = r.status?.phase || 'Unknown';
         return <Tag color={phaseColors[phase] || 'default'}>{phase}</Tag>;
       },
     },
     {
-      title: '重启次数',
-      key: 'restarts',
-      render: (_: any, r: any) => {
-        const statuses = r.status?.containerStatuses || [];
-        return statuses.reduce((sum: number, c: any) => sum + (c.restartCount || 0), 0);
-      },
+      title: '重启', key: 'restarts',
+      render: (_: any, r: any) => (r.status?.containerStatuses || []).reduce((s: number, c: any) => s + (c.restartCount || 0), 0),
+    },
+    { title: 'Pod IP', dataIndex: ['status', 'podIP'], key: 'ip', render: (v: string) => v || '-' },
+    { title: '节点', dataIndex: ['spec', 'nodeName'], key: 'node', render: (v: string) => v || '-' },
+    {
+      title: '运行时间', key: 'age',
+      render: (_: any, r: any) => r.metadata?.creationTimestamp ? getAge(r.metadata.creationTimestamp) : '-',
     },
     {
-      title: 'Pod IP',
-      dataIndex: ['status', 'podIP'],
-      key: 'ip',
-      render: (v: string) => v || '-',
-    },
-    {
-      title: '节点',
-      dataIndex: ['spec', 'nodeName'],
-      key: 'node',
-      render: (v: string) => v || '-',
-    },
-    {
-      title: '创建时间',
-      key: 'age',
-      render: (_: any, r: any) => {
-        const ts = r.metadata?.creationTimestamp;
-        return ts ? getAge(ts) : '-';
-      },
-    },
-    {
-      title: '操作',
-      key: 'actions',
-      width: 140,
+      title: '操作', key: 'actions', width: 140,
       render: (_: any, record: any) => (
         <Space>
-          <Button
-            size="small"
-            type="link"
-            onClick={() => setLogState({ open: true, pod: record })}
-          >
+          <Button size="small" type="link" icon={<FileTextOutlined />} onClick={() => setLogState({ open: true, pod: record })}>
             日志
           </Button>
-          <Button
-            size="small"
-            type="link"
-            onClick={() => setTermState({ open: true, pod: record })}
-          >
+          <Button size="small" type="link" icon={<CodeOutlined />} onClick={() => setTermState({ open: true, pod: record })}>
             终端
           </Button>
         </Space>
@@ -167,23 +228,11 @@ export default function DeploymentDetailPage() {
   ];
 
   if (loadingDeployment) {
-    return (
-      <div style={{ textAlign: 'center', padding: 64 }}>
-        <Spin size="large" />
-      </div>
-    );
+    return <div style={{ textAlign: 'center', padding: 64 }}><Spin size="large" /></div>;
   }
 
   if (error) {
-    return (
-      <Alert
-        type="error"
-        message={error}
-        action={
-          <Button size="small" onClick={() => router.back()}>返回</Button>
-        }
-      />
-    );
+    return <Alert type="error" message={error} action={<Button size="small" onClick={() => router.back()}>返回</Button>} />;
   }
 
   const image = deployment?.spec?.template?.spec?.containers?.[0]?.image || '-';
@@ -193,35 +242,55 @@ export default function DeploymentDetailPage() {
 
   return (
     <div>
+      {/* Header */}
       <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
         <Button icon={<ArrowLeftOutlined />} onClick={() => router.back()} type="text" />
         <Breadcrumb
           items={[
-            { title: 'Deployments', onClick: () => router.push('/resources/workloads/deployments'), href: '#' },
+            { title: <a onClick={() => router.push('/resources/workloads/deployments')}>Deployments</a> },
             { title: name },
           ]}
         />
       </div>
 
-      <Title level={4} style={{ marginBottom: 16 }}>{name}</Title>
+      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Space>
+          <Title level={4} style={{ margin: 0 }}>{name}</Title>
+          <Tag color={ready ? 'green' : 'orange'}>{ready ? 'Ready' : 'Updating'}</Tag>
+        </Space>
+        <Space>
+          {permissions.canUpdate && (
+            <Button
+              icon={<EditOutlined />}
+              onClick={() => setDrawerState({ open: true, mode: 'edit' })}
+            >
+              编辑
+            </Button>
+          )}
+          {permissions.canUpdate && (
+            <Popconfirm title="确认重新部署？将触发 Pod 滚动重启" onConfirm={handleRestart}>
+              <Button icon={<ReloadOutlined />} loading={restarting}>重新部署</Button>
+            </Popconfirm>
+          )}
+          {permissions.canUpdate && (
+            <Popconfirm title="确认回滚到上一版本？" onConfirm={handleRollback}>
+              <Button icon={<RollbackOutlined />} loading={rollingBack}>回滚</Button>
+            </Popconfirm>
+          )}
+          <Button onClick={fetchDeployment}>刷新</Button>
+        </Space>
+      </div>
 
+      {/* Deployment Info */}
       <Card style={{ marginBottom: 16 }}>
         <Descriptions bordered size="small" column={2}>
           <Descriptions.Item label="名称">{deployment?.metadata?.name}</Descriptions.Item>
           <Descriptions.Item label="命名空间">{deployment?.metadata?.namespace}</Descriptions.Item>
-          <Descriptions.Item label="镜像" span={2}>
-            <Typography.Text code>{image}</Typography.Text>
-          </Descriptions.Item>
-          <Descriptions.Item label="副本数">
-            {readyReplicas} / {desiredReplicas}
-          </Descriptions.Item>
-          <Descriptions.Item label="状态">
-            <Tag color={ready ? 'green' : 'orange'}>{ready ? 'Ready' : 'Updating'}</Tag>
-          </Descriptions.Item>
+          <Descriptions.Item label="镜像" span={2}><Text code>{image}</Text></Descriptions.Item>
+          <Descriptions.Item label="副本数">{readyReplicas} / {desiredReplicas}</Descriptions.Item>
+          <Descriptions.Item label="策略">{deployment?.spec?.strategy?.type || '-'}</Descriptions.Item>
           <Descriptions.Item label="创建时间">
-            {deployment?.metadata?.creationTimestamp
-              ? new Date(deployment.metadata.creationTimestamp).toLocaleString()
-              : '-'}
+            {deployment?.metadata?.creationTimestamp ? new Date(deployment.metadata.creationTimestamp).toLocaleString() : '-'}
           </Descriptions.Item>
           <Descriptions.Item label="标签选择器">
             {Object.entries(deployment?.spec?.selector?.matchLabels || {}).map(([k, v]) => (
@@ -231,12 +300,8 @@ export default function DeploymentDetailPage() {
         </Descriptions>
       </Card>
 
-      <Card
-        title={`Pods (${pods.length})`}
-        extra={
-          <Button size="small" onClick={fetchDeployment}>刷新</Button>
-        }
-      >
+      {/* Pods */}
+      <Card title={`Pods (${pods.length})`}>
         <Table
           dataSource={pods}
           columns={podColumns}
@@ -247,6 +312,20 @@ export default function DeploymentDetailPage() {
         />
       </Card>
 
+      {/* Edit Drawer */}
+      <ResourceDrawer
+        open={drawerState.open}
+        mode={drawerState.mode}
+        kind="deployments"
+        kindLabel="Deployment"
+        record={deployment}
+        namespace={namespace}
+        permissions={permissions}
+        onClose={() => setDrawerState({ open: false, mode: 'view' })}
+        onSuccess={() => { setDrawerState({ open: false, mode: 'view' }); fetchDeployment(); }}
+      />
+
+      {/* Pod Log Viewer */}
       {logState.open && logState.pod && (
         <PodLogViewer
           open={logState.open}
@@ -258,6 +337,7 @@ export default function DeploymentDetailPage() {
         />
       )}
 
+      {/* Pod Terminal */}
       {termState.open && termState.pod && (
         <PodTerminal
           open={termState.open}
