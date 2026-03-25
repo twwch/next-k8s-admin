@@ -95,8 +95,8 @@ async function handleMessage(ws: AuthenticatedSocket, msg: any) {
   const { type, clusterId, namespace, podName, container, resourceType } = msg;
 
   // RBAC check for every subscription
-  const resource = type === 'subscribe-logs' ? 'pods' : type === 'subscribe-events' ? 'events' : resourceType || 'pods';
-  const action = type === 'subscribe-logs' ? 'logs' : 'get';
+  const resource = type === 'subscribe-logs' ? 'pods' : type === 'subscribe-events' ? 'events' : type === 'subscribe-exec' ? 'pods' : resourceType || 'pods';
+  const action = type === 'subscribe-logs' ? 'logs' : type === 'subscribe-exec' ? 'exec' : 'get';
 
   if (!checkPermission(ws.bindings || [], { clusterId, namespace: namespace || '*', resource, action })) {
     ws.send(JSON.stringify({ type: 'error', message: '权限不足' }));
@@ -127,6 +127,11 @@ async function handleMessage(ws: AuthenticatedSocket, msg: any) {
     });
   }
 
+  if (type === 'subscribe-exec') {
+    await handleExec(ws, msg);
+    return;
+  }
+
   if (type === 'subscribe-resource-watch') {
     await handleResourceWatch(ws, msg);
     return;
@@ -147,6 +152,66 @@ async function handleMessage(ws: AuthenticatedSocket, msg: any) {
 
     ws.on('close', () => watchReq.abort());
   }
+}
+
+// Exec handler — interactive shell via k8s.Exec
+async function handleExec(ws: AuthenticatedSocket, msg: any) {
+  const { clusterId, namespace, podName, container } = msg;
+  const clients = await getK8sClient(clusterId);
+  const exec = new k8s.Exec(clients.kc);
+
+  const { PassThrough: PT } = await import('stream');
+  const stdin = new PT();
+  const stdout = new PT();
+  const stderr = new PT();
+
+  stdout.on('data', (chunk: Buffer) => {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'exec-output', data: chunk.toString() }));
+    }
+  });
+
+  stderr.on('data', (chunk: Buffer) => {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'exec-output', data: chunk.toString() }));
+    }
+  });
+
+  // Start exec session
+  const execWs = await exec.exec(
+    namespace,
+    podName,
+    container || '',
+    ['/bin/sh', '-c', 'TERM=xterm-256color; export TERM; [ -x /bin/bash ] && exec /bin/bash || exec /bin/sh'],
+    stdout,
+    stderr,
+    stdin,
+    true, // tty
+  );
+
+  // Forward incoming messages (stdin / resize) from client to pod
+  ws.on('message', async (data) => {
+    try {
+      const parsed = JSON.parse(data.toString());
+      if (parsed.type === 'exec-input') {
+        stdin.push(parsed.data);
+      } else if (parsed.type === 'exec-resize') {
+        // xterm resize — some clients send this; ignore gracefully if exec doesn't support it
+      }
+    } catch {
+      // raw data
+      stdin.push(data);
+    }
+  });
+
+  ws.on('close', () => {
+    stdin.push(null);
+    stdout.destroy();
+    stderr.destroy();
+    if (execWs && (execWs as any).readyState === WebSocket.OPEN) {
+      (execWs as any).close();
+    }
+  });
 }
 
 // Resource watch handler

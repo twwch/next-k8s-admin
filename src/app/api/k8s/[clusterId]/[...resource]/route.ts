@@ -46,7 +46,7 @@ function methodToAction(method: string): string {
 
 const actionLabel: Record<string, string> = { create: '创建', update: '更新', delete: '删除' };
 
-async function notifyIfEnabled(clusterId: string, action: string, kind: string, resourceName: string, namespace: string | undefined, operator: string) {
+async function notifyIfEnabled(clusterId: string, action: string, kind: string, resourceName: string, namespace: string | undefined, operator: string, changeMessage?: string) {
   try {
     const [cluster] = await db.select().from(clusters).where(eq(clusters.id, clusterId)).limit(1);
     if (!cluster?.notifyEnabled || !cluster.webhookUrl) return;
@@ -56,7 +56,7 @@ async function notifyIfEnabled(clusterId: string, action: string, kind: string, 
       namespace: namespace || '-',
       revision: 0,
       status: 'applied',
-      message: `${actionLabel[action] || action} ${kind} ${resourceName}`,
+      message: changeMessage || `${actionLabel[action] || action} ${kind} ${resourceName}`,
       operator,
       time: new Date().toLocaleString('zh-CN'),
     });
@@ -125,6 +125,7 @@ async function handleRequest(req: NextRequest, params: Promise<Params>) {
     }
 
     if (req.method === 'PUT' && name) {
+      const changeMessage = req.headers.get('X-Change-Message') || undefined;
       const body = await req.json();
       const updated = await updateResource(clusterId, kind, name, body, namespace);
       await writeAuditLog({
@@ -133,10 +134,11 @@ async function handleRequest(req: NextRequest, params: Promise<Params>) {
         requestMethod: 'PUT', requestPath: req.nextUrl.pathname,
         requestBody: body, responseStatus: 200,
       });
-      notifyIfEnabled(clusterId, 'update', kind, name, namespace, auth.user.username);
+      notifyIfEnabled(clusterId, 'update', kind, name, namespace, auth.user.username, changeMessage);
       writeReleaseLog({
         action: 'update', kind, resourceName: name,
         clusterId, namespace: namespace || null, userId: auth.user.id, requestBody: body,
+        message: changeMessage,
       });
       return NextResponse.json(updated);
     }

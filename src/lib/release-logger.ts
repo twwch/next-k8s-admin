@@ -17,13 +17,14 @@ interface ReleaseLogEntry {
   namespace: string | null;
   userId: string;
   requestBody?: any;
+  message?: string;
 }
 
 export async function writeReleaseLog(entry: ReleaseLogEntry) {
   try {
     const kindLabel = KIND_LABELS[entry.kind] || entry.kind;
     const actionLabel = entry.action === 'create' ? '创建' : entry.action === 'update' ? '更新' : '删除';
-    const message = `${actionLabel} ${kindLabel} ${entry.resourceName}`;
+    const message = entry.message || `${actionLabel} ${kindLabel} ${entry.resourceName}`;
 
     // Compute next revision
     const nsCondition = entry.namespace

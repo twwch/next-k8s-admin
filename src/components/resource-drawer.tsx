@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Drawer, Button, Space, message, Tag } from 'antd';
+import { Drawer, Button, Space, message, Tag, Input } from 'antd';
 import yaml from 'yaml';
 import YamlEditor from '@/components/yaml-editor';
 import { RESOURCE_TEMPLATES } from '@/components/resource-templates';
@@ -51,10 +51,12 @@ export default function ResourceDrawer({
   const { clusterId } = useClusterStore();
   const [currentMode, setCurrentMode] = useState(mode);
   const [yamlText, setYamlText] = useState('');
+  const [changeMessage, setChangeMessage] = useState('');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     setCurrentMode(mode);
+    if (!open) setChangeMessage('');
   }, [mode, open]);
 
   useEffect(() => {
@@ -84,6 +86,10 @@ export default function ResourceDrawer({
 
   const handleSave = async () => {
     if (!clusterId) return;
+    if (!changeMessage.trim()) {
+      message.warning('请填写变更说明');
+      return;
+    }
     setLoading(true);
     try {
       let parsed: any;
@@ -100,7 +106,10 @@ export default function ResourceDrawer({
 
       const res = await fetch(url, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Change-Message': changeMessage.trim(),
+        },
         body: JSON.stringify(parsed),
       });
 
@@ -192,11 +201,23 @@ export default function ResourceDrawer({
   ) : null;
 
   const footer = currentMode === 'edit' ? (
-    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-      <Space>
-        <Button onClick={() => setCurrentMode('view')}>取消</Button>
-        <Button type="primary" loading={loading} onClick={handleSave}>保存</Button>
-      </Space>
+    <div>
+      <div style={{ marginBottom: 8 }}>
+        <Input.TextArea
+          placeholder="变更说明（必填）"
+          value={changeMessage}
+          onChange={(e) => setChangeMessage(e.target.value)}
+          rows={2}
+          maxLength={500}
+          showCount
+        />
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <Space>
+          <Button onClick={() => setCurrentMode('view')}>取消</Button>
+          <Button type="primary" loading={loading} onClick={handleSave}>保存</Button>
+        </Space>
+      </div>
     </div>
   ) : currentMode === 'create' ? (
     <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
