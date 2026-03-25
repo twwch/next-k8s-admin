@@ -55,25 +55,41 @@ async function handleExec(ws: AuthenticatedSocket, msg: any) {
   try {
     const clients = await getK8sClient(clusterId);
     const exec = new k8s.Exec(clients.kc);
+    const { Writable } = await import('stream');
 
     const shellCmd = `TERM=xterm-256color; export TERM; export PS1='\\033[01;32mroot@${podName}\\033[00m:\\033[01;34m\\w\\033[00m\\$ '; [ -x /bin/bash ] && exec /bin/bash --norc || exec /bin/sh`;
 
-    // Create dummy writable streams that discard output (we read from the WS directly)
-    const { Writable } = await import('stream');
-    const devNull = new Writable({ write(_c, _e, cb) { cb(); } });
-    // Stdin must be a readable stream that never ends (keeps the shell alive)
-    const { PassThrough: PT } = await import('stream');
-    const stdinStream = new PT();
+    // Stdout/Stderr → forward to browser WebSocket
+    const stdout = new Writable({
+      write(chunk, _enc, cb) {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'exec-output', data: chunk.toString() }));
+        }
+        cb();
+      },
+    });
+
+    const stderr = new Writable({
+      write(chunk, _enc, cb) {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'exec-output', data: chunk.toString() }));
+        }
+        cb();
+      },
+    });
+
+    // Stdin ← receives data from browser, passed to K8s exec
+    const stdin = new PassThrough();
 
     const execConn = await exec.exec(
       namespace,
       podName,
       container || '',
       ['/bin/sh', '-c', shellCmd],
-      devNull,        // stdout — we read from WS instead
-      devNull,        // stderr — we read from WS instead
-      stdinStream,    // stdin — must be provided to keep shell alive
-      true,           // tty
+      stdout,
+      stderr,
+      stdin,
+      true, // tty
       (status: k8s.V1Status) => {
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ type: 'exec-output', data: `\r\n\x1b[33m[Exit: ${status.status}]\x1b[0m\r\n` }));
@@ -81,64 +97,32 @@ async function handleExec(ws: AuthenticatedSocket, msg: any) {
       },
     );
 
-    // execConn is a WebSocket — intercept messages at the K8s protocol level
-    const k8sWs = execConn as any;
-
-    // Listen for K8s exec messages directly on the underlying WebSocket
-    k8sWs.on('message', (rawData: any) => {
-      try {
-        const data = Buffer.isBuffer(rawData) ? rawData : Buffer.from(rawData);
-        if (data.length === 0) return;
-        const channel = data[0];
-        const content = data.slice(1).toString('utf8');
-        if ((channel === 1 || channel === 2) && content && ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'exec-output', data: content }));
-        }
-      } catch (err) {
-        console.error('Exec message parse error:', err);
-      }
-    });
-
-    // Forward client input → K8s exec stdin (channel 0)
+    // Forward browser keyboard input → stdin stream → K8s exec
     const messageHandler = (rawData: any) => {
       try {
         const parsed = JSON.parse(rawData.toString());
-        if (parsed.type === 'exec-input' && k8sWs.readyState === WebSocket.OPEN) {
-          const inputBuf = Buffer.from(parsed.data, 'utf8');
-          const frame = Buffer.alloc(inputBuf.length + 1);
-          frame.writeUInt8(0, 0); // channel 0 = stdin
-          inputBuf.copy(frame, 1);
-          k8sWs.send(frame);
-        } else if (parsed.type === 'exec-resize' && k8sWs.readyState === WebSocket.OPEN) {
-          const resizeMsg = JSON.stringify({ Width: parsed.cols, Height: parsed.rows });
-          const resizeBuf = Buffer.from(resizeMsg, 'utf8');
-          const frame = Buffer.alloc(resizeBuf.length + 1);
-          frame.writeUInt8(4, 0); // channel 4 = resize
-          resizeBuf.copy(frame, 1);
-          k8sWs.send(frame);
+        if (parsed.type === 'exec-input') {
+          stdin.write(parsed.data);
         }
       } catch {}
     };
 
     ws.on('message', messageHandler);
 
-    k8sWs.on('close', () => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'exec-output', data: '\r\n\x1b[33m[会话已结束]\x1b[0m\r\n' }));
-      }
-    });
-
-    k8sWs.on('error', (err: Error) => {
-      console.error('K8s exec ws error:', err.message);
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'error', message: `Exec 错误: ${err.message}` }));
-      }
-    });
+    if (execConn && typeof (execConn as any).on === 'function') {
+      (execConn as any).on('close', () => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'exec-output', data: '\r\n\x1b[33m[会话已结束]\x1b[0m\r\n' }));
+        }
+      });
+    }
 
     ws.on('close', () => {
       ws.removeListener('message', messageHandler);
-      stdinStream.end();
-      try { k8sWs.close(); } catch {}
+      stdin.end();
+      stdout.destroy();
+      stderr.destroy();
+      try { if (execConn && typeof (execConn as any).close === 'function') (execConn as any).close(); } catch {}
     });
 
   } catch (err: any) {
