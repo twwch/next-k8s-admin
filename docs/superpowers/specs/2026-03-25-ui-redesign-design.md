@@ -87,11 +87,12 @@ Props:
 
 ### 2. 登录页改造
 
-**当前**：居中卡片，灰色背景
+**当前**：居中卡片，灰色背景（Auth layout 为居中 flex 容器，`background: #f0f2f5`）
 **改造后**：左右分栏布局
 - 左侧：深蓝到品牌蓝渐变背景，展示 Logo + 产品名 + 描述 + 集群在线状态
 - 右侧：白色背景，「欢迎回来」标题 + 登录表单（保留 Tabs 切换账号密码/邮箱验证码）
-- Auth layout 需要同步改造
+- Auth layout 改造：改为全屏容器（`min-height: 100vh`），不再居中，由页面自行控制布局
+- 移动端响应式：屏幕宽度 < 768px 时左侧品牌区隐藏，表单占满全屏
 
 ### 3. 改密页改造
 
@@ -99,9 +100,10 @@ Props:
 
 ### 4. Dashboard 改造
 
-**当前**：4 个白底 Statistic 卡片 + 事件列表 + 集群状态列表
+**当前**：4 个白底 Statistic 卡片 + 事件列表 + 集群状态列表，外层 `<Spin>` 包裹
 **改造后**：
 - 4 个渐变色 StatCard（蓝/绿/紫/橙），带趋势指标
+- 加载状态：保留 Spin 包裹，StatCard 在数据未加载时显示 `'-'` 占位
 - 事件列表包在 Card 中，事件行使用圆角 Tag + 时间右对齐
 - 集群状态列表包在 Card 中
 
@@ -110,10 +112,10 @@ Props:
 **当前**：裸 Title + 裸 Table
 **改造后**：PageContainer 包裹，添加描述文字
 
-### 6. 添加集群页
+### 6. 添加/编辑集群页
 
-**当前**：已有 Card 包裹，基本 OK
-**改造后**：Card 圆角升级为 12px，按钮使用渐变色
+**添加集群** (`/clusters/new`)：已有 Card 包裹，圆角和按钮样式通过全局 ConfigProvider 统一即可
+**编辑集群** (`/clusters/[id]`)：当前使用 Tabs + Card 布局，改造为 PageContainer 包裹，Tabs 保持不变
 
 ### 7. 用户管理页改造
 
@@ -138,16 +140,32 @@ Props:
 **当前**：裸 Title + 裸 Table
 **改造后**：PageContainer 包裹
 
-### 11. 资源页面（Pods, Deployments, StatefulSets, DaemonSets, Jobs, Services, Ingresses, ConfigMaps, Secrets, PVCs, StorageClasses, Namespaces）
+### 11. 资源列表页面（Pods, Deployments, StatefulSets, DaemonSets, Jobs, Services, Ingresses, ConfigMaps, Secrets, PVCs, StorageClasses, Namespaces）
 
 **当前**：裸 Title + NamespaceSelector + ResourceTable
-**改造后**：PageContainer 包裹，NamespaceSelector 整合到 filters 区域
+**改造后**：
+- PageContainer 包裹
+- NamespaceSelector 整合到 `filters` 区域（仅位置移动，组件本身不变）
+- 创建按钮（如 Deployments 的 `+ 创建`）放入 PageContainer 的 `extra` 区域
+- `ResourceTable` 组件内部 `size` 改为 `"middle"`
 
-### 12. 全局样式调整
+### 12. 资源详情页面
+
+#### Deployment 详情页 (`/resources/workloads/deployments/[name]`)
+**改造后**：Card 包裹内容区域，统一圆角和阴影
+
+#### Pod 详情页 (`/resources/workloads/pods/[name]`)
+**改造后**：Card 包裹内容区域，终端和日志组件保持现有深色主题不变
+
+### 13. ClusterSelector 数据补充
+
+当前 ClusterSelector 只获取 `id` 和 `displayName/name`。改造后需要从 `/api/clusters` 响应中额外取 `status` 字段以显示连接状态圆点。
+
+### 14. 全局样式调整
 
 - Ant Design ConfigProvider token 调整：Card 圆角 12px、按钮圆角 6px
 - 主要操作按钮统一使用渐变色（通过 CSS class 或 style）
-- Table 统一使用 `size="middle"`
+- Table 统一从 `size="small"` 改为 `size="middle"`（提高行间距和可读性）
 
 ## 实施策略
 
