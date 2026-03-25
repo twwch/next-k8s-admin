@@ -1,5 +1,5 @@
 import { WebSocketServer, WebSocket } from 'ws';
-import { PassThrough } from 'stream';
+import { PassThrough, Writable } from 'stream';
 import { db } from '@/lib/db';
 import { sessions, users, userRoleBindings, rolePermissions, clusters as clustersTable } from '@/lib/db/schema';
 import { eq, and, gt, lt } from 'drizzle-orm';
@@ -56,27 +56,40 @@ async function handleExec(ws: AuthenticatedSocket, msg: any) {
     const clients = await getK8sClient(clusterId);
     const exec = new k8s.Exec(clients.kc);
 
-    const stdout = new PassThrough();
-    const stderr = new PassThrough();
     const stdin = new PassThrough();
 
-    stdout.on('data', (chunk: Buffer) => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'exec-output', data: chunk.toString() }));
-      }
+    // Writable streams that forward to WebSocket client
+    const stdout = new Writable({
+      write(chunk, _encoding, callback) {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'exec-output', data: chunk.toString() }));
+        }
+        callback();
+      },
     });
 
-    stderr.on('data', (chunk: Buffer) => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'exec-output', data: chunk.toString() }));
-      }
+    const stderr = new Writable({
+      write(chunk, _encoding, callback) {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'exec-output', data: chunk.toString() }));
+        }
+        callback();
+      },
     });
+
+    // Set PS1 prompt with pod name to look like a real Linux terminal
+    const shellCmd = [
+      `TERM=xterm-256color`,
+      `export TERM`,
+      `export PS1='\\[\\033[01;32m\\]root@${podName}\\[\\033[00m\\]:\\[\\033[01;34m\\]\\w\\[\\033[00m\\]\\$ '`,
+      `[ -x /bin/bash ] && exec /bin/bash --norc || exec /bin/sh`,
+    ].join('; ');
 
     const execConn = await exec.exec(
       namespace,
       podName,
       container || '',
-      ['/bin/sh', '-c', 'TERM=xterm-256color; export TERM; [ -x /bin/bash ] && exec /bin/bash || exec /bin/sh'],
+      ['/bin/sh', '-c', shellCmd],
       stdout,
       stderr,
       stdin,
@@ -84,20 +97,33 @@ async function handleExec(ws: AuthenticatedSocket, msg: any) {
     );
 
     // Forward client input to pod stdin
-    const messageHandler = (data: any) => {
+    const messageHandler = (rawData: any) => {
       try {
-        const parsed = JSON.parse(data.toString());
+        const parsed = JSON.parse(rawData.toString());
         if (parsed.type === 'exec-input') {
           stdin.write(parsed.data);
+        } else if (parsed.type === 'exec-resize' && execConn) {
+          // Resize terminal if supported
+          try {
+            const resizeMsg = JSON.stringify({ Width: parsed.cols, Height: parsed.rows });
+            if (typeof (execConn as any).send === 'function') {
+              // K8s exec resize channel is channel 4
+              const buf = Buffer.alloc(resizeMsg.length + 1);
+              buf.writeUInt8(4, 0); // resize channel
+              buf.write(resizeMsg, 1);
+              (execConn as any).send(buf);
+            }
+          } catch {}
         }
       } catch {
-        stdin.write(data);
+        // Not JSON, treat as raw stdin
+        stdin.write(rawData);
       }
     };
 
     ws.on('message', messageHandler);
 
-    ws.on('close', () => {
+    const cleanup = () => {
       ws.removeListener('message', messageHandler);
       stdin.end();
       stdout.destroy();
@@ -107,13 +133,14 @@ async function handleExec(ws: AuthenticatedSocket, msg: any) {
           (execConn as any).close();
         }
       } catch {}
-    });
+    };
 
-    // Handle exec connection close
+    ws.on('close', cleanup);
+
     if (execConn && typeof (execConn as any).on === 'function') {
       (execConn as any).on('close', () => {
         if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'exec-output', data: '\r\n[会话已结束]\r\n' }));
+          ws.send(JSON.stringify({ type: 'exec-output', data: '\r\n\x1b[33m[会话已结束]\x1b[0m\r\n' }));
         }
       });
       (execConn as any).on('error', (err: any) => {
@@ -123,7 +150,9 @@ async function handleExec(ws: AuthenticatedSocket, msg: any) {
       });
     }
   } catch (err: any) {
-    ws.send(JSON.stringify({ type: 'error', message: `Exec 失败: ${err.message}` }));
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'error', message: `Exec 失败: ${err.message}` }));
+    }
   }
 }
 

@@ -46,7 +46,18 @@ function methodToAction(method: string): string {
 
 const actionLabel: Record<string, string> = { create: '创建', update: '更新', delete: '删除' };
 
-async function notifyIfEnabled(clusterId: string, action: string, kind: string, resourceName: string, namespace: string | undefined, operator: string, changeMessage?: string) {
+function extractImage(body: any): string {
+  // Try common paths for image in K8s resources
+  const image = body?.spec?.template?.spec?.containers?.[0]?.image
+    || body?.spec?.containers?.[0]?.image
+    || body?.spec?.jobTemplate?.spec?.template?.spec?.containers?.[0]?.image;
+  if (!image) return '-';
+  // Extract version tag: "nginx:1.26" -> "1.26", "repo/app:v2.3.1" -> "v2.3.1"
+  const parts = image.split(':');
+  return parts.length > 1 ? parts[parts.length - 1] : image;
+}
+
+async function notifyIfEnabled(clusterId: string, action: string, kind: string, resourceName: string, namespace: string | undefined, operator: string, changeMessage?: string, body?: any) {
   try {
     const [cluster] = await db.select().from(clusters).where(eq(clusters.id, clusterId)).limit(1);
     if (!cluster?.notifyEnabled || !cluster.webhookUrl) return;
@@ -54,6 +65,7 @@ async function notifyIfEnabled(clusterId: string, action: string, kind: string, 
       releaseName: resourceName,
       clusterName: cluster.displayName || cluster.name,
       namespace: namespace || '-',
+      image: body ? extractImage(body) : '-',
       revision: 0,
       status: 'applied',
       message: changeMessage || `${actionLabel[action] || action} ${kind} ${resourceName}`,
@@ -116,7 +128,7 @@ async function handleRequest(req: NextRequest, params: Promise<Params>) {
         requestMethod: 'POST', requestPath: req.nextUrl.pathname,
         requestBody: body, responseStatus: 201,
       });
-      notifyIfEnabled(clusterId, 'create', kind, body.metadata?.name || '', namespace, auth.user.username);
+      notifyIfEnabled(clusterId, 'create', kind, body.metadata?.name || '', namespace, auth.user.username, undefined, body);
       writeReleaseLog({
         action: 'create', kind, resourceName: body.metadata?.name || '',
         clusterId, namespace: namespace || null, userId: auth.user.id, requestBody: body,
@@ -134,7 +146,7 @@ async function handleRequest(req: NextRequest, params: Promise<Params>) {
         requestMethod: 'PUT', requestPath: req.nextUrl.pathname,
         requestBody: body, responseStatus: 200,
       });
-      notifyIfEnabled(clusterId, 'update', kind, name, namespace, auth.user.username, changeMessage);
+      notifyIfEnabled(clusterId, 'update', kind, name, namespace, auth.user.username, changeMessage, body);
       writeReleaseLog({
         action: 'update', kind, resourceName: name,
         clusterId, namespace: namespace || null, userId: auth.user.id, requestBody: body,

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Modal, Select, Space, Alert } from 'antd';
+import { Modal, Select, Space, Alert, Tag } from 'antd';
 
 interface Props {
   open: boolean;
@@ -15,6 +15,7 @@ interface Props {
 export default function PodTerminal({ open, onClose, clusterId, namespace, podName, containers }: Props) {
   const [container, setContainer] = useState(containers[0] || '');
   const [error, setError] = useState<string | null>(null);
+  const [connected, setConnected] = useState(false);
   const termRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<any>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -30,37 +31,60 @@ export default function PodTerminal({ open, onClose, clusterId, namespace, podNa
       xtermRef.current = null;
     }
     fitAddonRef.current = null;
+    setConnected(false);
   };
 
   const initTerminal = async (c: string) => {
     if (!termRef.current) return;
     setError(null);
 
-    // Dynamically import xterm to avoid SSR issues
     const { Terminal } = await import('@xterm/xterm');
     const { FitAddon } = await import('@xterm/addon-fit');
     await import('@xterm/xterm/css/xterm.css');
 
-    // Dispose previous terminal
-    if (xtermRef.current) {
-      xtermRef.current.dispose();
-    }
+    if (xtermRef.current) xtermRef.current.dispose();
 
     const term = new Terminal({
       theme: {
-        background: '#1e1e1e',
-        foreground: '#d4d4d4',
+        background: '#0c0c0c',
+        foreground: '#cccccc',
         cursor: '#ffffff',
+        cursorAccent: '#000000',
+        selectionBackground: '#264f78',
+        black: '#0c0c0c',
+        red: '#c50f1f',
+        green: '#13a10e',
+        yellow: '#c19c00',
+        blue: '#0037da',
+        magenta: '#881798',
+        cyan: '#3a96dd',
+        white: '#cccccc',
+        brightBlack: '#767676',
+        brightRed: '#e74856',
+        brightGreen: '#16c60c',
+        brightYellow: '#f9f1a5',
+        brightBlue: '#3b78ff',
+        brightMagenta: '#b4009e',
+        brightCyan: '#61d6d6',
+        brightWhite: '#f2f2f2',
       },
-      fontFamily: 'monospace',
+      fontFamily: "'JetBrains Mono', 'Fira Code', 'SF Mono', Monaco, Consolas, monospace",
       fontSize: 13,
+      lineHeight: 1.2,
       cursorBlink: true,
+      cursorStyle: 'block',
+      scrollback: 5000,
+      allowProposedApi: true,
     });
 
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
     term.open(termRef.current);
-    fitAddon.fit();
+
+    // Delay fit to ensure DOM is ready
+    requestAnimationFrame(() => {
+      fitAddon.fit();
+    });
 
     xtermRef.current = term;
     fitAddonRef.current = fitAddon;
@@ -78,8 +102,7 @@ export default function PodTerminal({ open, onClose, clusterId, namespace, podNa
 
     const wsUrl = process.env.NEXT_PUBLIC_WS_URL;
     if (!wsUrl) {
-      setError('WebSocket 服务未配置 (NEXT_PUBLIC_WS_URL)');
-      term.write('\x1b[31m请启动 WebSocket 服务: npm run ws:dev\x1b[0m\r\n');
+      setError('WebSocket 服务未配置，请重启 Next.js 服务');
       return;
     }
 
@@ -87,20 +110,21 @@ export default function PodTerminal({ open, onClose, clusterId, namespace, podNa
     try {
       ws = new WebSocket(`${wsUrl}?token=${wsToken}`);
     } catch {
-      setError('WebSocket 连接失败，请确认 WS 服务已启动 (npm run ws:dev)');
+      setError('WebSocket 连接失败');
       return;
     }
     wsRef.current = ws;
 
     const connectTimeout = setTimeout(() => {
       if (ws.readyState !== WebSocket.OPEN) {
-        setError('WebSocket 连接超时，请确认 WS 服务已启动 (npm run ws:dev)');
+        setError('WebSocket 连接超时');
         ws.close();
       }
-    }, 5000);
+    }, 8000);
 
     ws.onopen = () => {
       clearTimeout(connectTimeout);
+      setConnected(true);
       ws.send(JSON.stringify({
         type: 'subscribe-exec',
         clusterId,
@@ -108,6 +132,18 @@ export default function PodTerminal({ open, onClose, clusterId, namespace, podNa
         podName,
         container: c,
       }));
+
+      // Send initial resize
+      requestAnimationFrame(() => {
+        if (fitAddonRef.current) {
+          fitAddonRef.current.fit();
+          ws.send(JSON.stringify({
+            type: 'exec-resize',
+            cols: term.cols,
+            rows: term.rows,
+          }));
+        }
+      });
     };
 
     ws.onmessage = (event) => {
@@ -126,34 +162,46 @@ export default function PodTerminal({ open, onClose, clusterId, namespace, podNa
 
     ws.onerror = () => {
       clearTimeout(connectTimeout);
-      setError('WebSocket 连接失败，请确认 WS 服务已启动 (npm run ws:dev)');
+      setError('WebSocket 连接失败');
     };
 
     ws.onclose = () => {
       clearTimeout(connectTimeout);
-      term.write('\r\n\x1b[31m[连接已关闭]\x1b[0m\r\n');
+      setConnected(false);
+      term.write('\r\n\x1b[33m[连接已关闭]\x1b[0m\r\n');
     };
 
-    // Send keyboard input to server
     term.onData((data) => {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'exec-input', data }));
       }
     });
 
-    // Handle resize
     term.onResize(({ cols, rows }) => {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'exec-resize', cols, rows }));
       }
     });
+
+    // Handle window resize
+    const handleResize = () => {
+      if (fitAddonRef.current) fitAddonRef.current.fit();
+    };
+    window.addEventListener('resize', handleResize);
+    // Cleanup on dispose
+    const origDispose = term.dispose.bind(term);
+    term.dispose = () => {
+      window.removeEventListener('resize', handleResize);
+      origDispose();
+    };
   };
 
   useEffect(() => {
     if (open) {
       const c = containers[0] || '';
       setContainer(c);
-      initTerminal(c);
+      // Small delay to ensure modal is rendered
+      setTimeout(() => initTerminal(c), 100);
     } else {
       cleanup();
     }
@@ -163,45 +211,52 @@ export default function PodTerminal({ open, onClose, clusterId, namespace, podNa
   const handleContainerChange = (c: string) => {
     setContainer(c);
     cleanup();
-    initTerminal(c);
+    setTimeout(() => initTerminal(c), 100);
   };
 
   return (
     <Modal
       title={
-        <Space>
-          <span>终端 — {podName}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontFamily: 'monospace' }}>
+            <span style={{ color: '#16c60c' }}>root</span>
+            <span style={{ color: '#cccccc' }}>@</span>
+            <span style={{ color: '#3a96dd' }}>{podName}</span>
+          </span>
+          <Tag color={connected ? 'green' : 'default'}>{connected ? '已连接' : '未连接'}</Tag>
           {containers.length > 1 && (
             <Select
               value={container}
               onChange={handleContainerChange}
-              style={{ width: 200 }}
+              style={{ width: 160 }}
               size="small"
-            >
-              {containers.map((c) => (
-                <Select.Option key={c} value={c}>{c}</Select.Option>
-              ))}
-            </Select>
+              options={containers.map((c) => ({ value: c, label: c }))}
+            />
           )}
-        </Space>
+        </div>
       }
       open={open}
       onCancel={onClose}
       footer={null}
-      width={900}
+      width={960}
       destroyOnHidden
-      styles={{ body: { padding: 0 } }}
+      styles={{
+        body: { padding: 0 },
+        header: { background: '#1e1e1e', borderBottom: '1px solid #333', padding: '8px 16px' },
+        content: { background: '#0c0c0c' },
+      }}
+      closable
+      closeIcon={<span style={{ color: '#ccc' }}>✕</span>}
     >
       {error && (
-        <Alert message={error} type="error" style={{ margin: '8px 16px' }} />
+        <Alert message={error} type="error" style={{ margin: '8px 12px', borderRadius: 4 }} />
       )}
       <div
         ref={termRef}
         style={{
-          background: '#1e1e1e',
-          padding: 8,
-          borderRadius: '0 0 8px 8px',
-          minHeight: 480,
+          background: '#0c0c0c',
+          padding: '4px 8px',
+          minHeight: 500,
         }}
       />
     </Modal>
