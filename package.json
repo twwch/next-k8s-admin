@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:seed": "tsx src/lib/db/seed.ts",
+    "db:migrate": "drizzle-kit push",
+    "db:reset": "drizzle-kit push && tsx src/lib/db/seed.ts"
   },
   "dependencies": {
     "@ant-design/icons": "^6.1.0",
