@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { db } from '@/lib/db';
+import { clusters } from '@/lib/db/schema';
+import { eq } from 'drizzle-orm';
 import { validateSession } from '@/lib/auth/session';
 import { getUserBindings, checkPermission } from '@/lib/rbac/check';
 import { writeAuditLog } from '@/lib/audit/logger';
+import { sendFeishuNotification } from '@/lib/notify/feishu';
 import { listResources, getResource, createResource, updateResource, deleteResource, type ResourceKind } from '@/lib/k8s/resources';
+import { writeReleaseLog } from '@/lib/release-logger';
 
 type Params = { clusterId: string; resource: string[] };
 
@@ -37,6 +42,25 @@ function methodToAction(method: string): string {
     case 'DELETE': return 'delete';
     default: return 'get';
   }
+}
+
+const actionLabel: Record<string, string> = { create: '创建', update: '更新', delete: '删除' };
+
+async function notifyIfEnabled(clusterId: string, action: string, kind: string, resourceName: string, namespace: string | undefined, operator: string) {
+  try {
+    const [cluster] = await db.select().from(clusters).where(eq(clusters.id, clusterId)).limit(1);
+    if (!cluster?.notifyEnabled || !cluster.webhookUrl) return;
+    sendFeishuNotification(cluster.webhookUrl, {
+      releaseName: resourceName,
+      clusterName: cluster.displayName || cluster.name,
+      namespace: namespace || '-',
+      revision: 0,
+      status: 'applied',
+      message: `${actionLabel[action] || action} ${kind} ${resourceName}`,
+      operator,
+      time: new Date().toLocaleString('zh-CN'),
+    });
+  } catch { /* ignore notification errors */ }
 }
 
 async function handleRequest(req: NextRequest, params: Promise<Params>) {
@@ -92,6 +116,11 @@ async function handleRequest(req: NextRequest, params: Promise<Params>) {
         requestMethod: 'POST', requestPath: req.nextUrl.pathname,
         requestBody: body, responseStatus: 201,
       });
+      notifyIfEnabled(clusterId, 'create', kind, body.metadata?.name || '', namespace, auth.user.username);
+      writeReleaseLog({
+        action: 'create', kind, resourceName: body.metadata?.name || '',
+        clusterId, namespace: namespace || null, userId: auth.user.id, requestBody: body,
+      });
       return NextResponse.json(created, { status: 201 });
     }
 
@@ -104,6 +133,11 @@ async function handleRequest(req: NextRequest, params: Promise<Params>) {
         requestMethod: 'PUT', requestPath: req.nextUrl.pathname,
         requestBody: body, responseStatus: 200,
       });
+      notifyIfEnabled(clusterId, 'update', kind, name, namespace, auth.user.username);
+      writeReleaseLog({
+        action: 'update', kind, resourceName: name,
+        clusterId, namespace: namespace || null, userId: auth.user.id, requestBody: body,
+      });
       return NextResponse.json(updated);
     }
 
@@ -114,6 +148,11 @@ async function handleRequest(req: NextRequest, params: Promise<Params>) {
         resourceName: name, clusterId, namespace,
         requestMethod: 'DELETE', requestPath: req.nextUrl.pathname,
         responseStatus: 200,
+      });
+      notifyIfEnabled(clusterId, 'delete', kind, name, namespace, auth.user.username);
+      writeReleaseLog({
+        action: 'delete', kind, resourceName: name,
+        clusterId, namespace: namespace || null, userId: auth.user.id,
       });
       return NextResponse.json({ success: true });
     }
