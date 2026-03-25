@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Tag, Typography, Button, Space, message } from 'antd';
+import { useRouter } from 'next/navigation';
 import ResourceTable from '@/components/resource-table';
 import NamespaceSelector from '@/components/namespace-selector';
 import ResourceDrawer from '@/components/resource-drawer';
@@ -17,6 +18,7 @@ export default function DeploymentsPage() {
   const { data = [], loading, refresh } = useK8sResource('deployments', namespace);
   const permissions = usePermissions('deployments');
   const { clusterId } = useClusterStore();
+  const router = useRouter();
   const [drawerState, setDrawerState] = useState<{ open: boolean; mode: 'view' | 'edit' | 'create'; record?: any }>({ open: false, mode: 'view' });
 
   const handleDelete = async (record: any) => {
@@ -37,7 +39,7 @@ export default function DeploymentsPage() {
     {
       title: '名称', dataIndex: ['metadata', 'name'], key: 'name',
       render: (text: string, record: any) => (
-        <a onClick={() => setDrawerState({ open: true, mode: 'view', record })}>{text}</a>
+        <a onClick={() => router.push(`/resources/workloads/deployments/${record.metadata?.name}?namespace=${record.metadata?.namespace}`)}>{text}</a>
       ),
     },
     { title: '命名空间', dataIndex: ['metadata', 'namespace'], key: 'namespace' },
