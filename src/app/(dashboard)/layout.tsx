@@ -100,7 +100,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <ProLayout
         title="K8s Admin"
         layout="mix"
-        navTheme="dark"
+        navTheme="realDark"
         fixSiderbar
         collapsed={collapsed}
         onCollapse={setCollapsed}
