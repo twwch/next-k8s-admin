@@ -99,6 +99,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           colorPrimary: '#326CE5',
           borderRadius: 6,
         },
+        components: {
+          Card: {
+            borderRadiusLG: 12,
+          },
+        },
       }}
     >
       <App>
