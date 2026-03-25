@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { appReleases } from '@/lib/db/schema';
-import { eq, desc, and } from 'drizzle-orm';
+import { appReleases, clusters } from '@/lib/db/schema';
+import { eq, desc, and, isNull } from 'drizzle-orm';
 import { validateSession } from '@/lib/auth/session';
-import { createResource, type ResourceKind } from '@/lib/k8s/resources';
+import { applyResource, type ResourceKind } from '@/lib/k8s/resources';
 import { writeAuditLog } from '@/lib/audit/logger';
+import { sendFeishuNotification } from '@/lib/notify/feishu';
 
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await validateSession();
@@ -24,7 +25,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       and(
         eq(appReleases.name, target.name),
         eq(appReleases.clusterId, target.clusterId),
-        eq(appReleases.namespace, target.namespace),
+        target.namespace ? eq(appReleases.namespace, target.namespace) : isNull(appReleases.namespace),
       ),
     )
     .orderBy(desc(appReleases.revision))
@@ -43,6 +44,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     renderedManifests: target.renderedManifests,
     status: 'pending',
     revision: newRevision,
+    message: `回滚至 Revision #${target.revision}`,
     releasedBy: auth.user.id,
   }).returning();
 
@@ -52,7 +54,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     for (const manifest of manifests) {
       const kind = (manifest as any)?.kind?.toLowerCase() + 's' as ResourceKind;
       const resourceNamespace = (manifest as any)?.metadata?.namespace || target.namespace;
-      await createResource(target.clusterId, kind, manifest, resourceNamespace);
+      await applyResource(target.clusterId, kind, manifest, resourceNamespace);
     }
   } catch {
     status = 'failed';
@@ -73,11 +75,26 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     resourceType: 'app_release',
     resourceName: target.name,
     clusterId: target.clusterId,
-    namespace: target.namespace,
+    namespace: target.namespace ?? undefined,
     requestMethod: 'POST',
     requestPath: `/api/apps/releases/${id}/rollback`,
     responseStatus: 200,
   });
+
+  // Send notification if enabled
+  const [cluster] = await db.select().from(clusters).where(eq(clusters.id, target.clusterId)).limit(1);
+  if (cluster?.notifyEnabled && cluster.webhookUrl) {
+    sendFeishuNotification(cluster.webhookUrl, {
+      releaseName: target.name,
+      clusterName: cluster.displayName || cluster.name,
+      namespace: target.namespace ?? '-',
+      revision: newRevision,
+      status: 'rolled_back',
+      message: `回滚至 Revision #${target.revision}`,
+      operator: auth.user.username,
+      time: new Date().toLocaleString('zh-CN'),
+    });
+  }
 
   return NextResponse.json({ ...newRelease, status });
 }

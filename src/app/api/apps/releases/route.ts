@@ -1,15 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { appReleases, appTemplates } from '@/lib/db/schema';
+import { appReleases, appTemplates, clusters, users } from '@/lib/db/schema';
 import { validateSession } from '@/lib/auth/session';
 import { writeAuditLog } from '@/lib/audit/logger';
-import { createResource, type ResourceKind } from '@/lib/k8s/resources';
-import { desc, eq } from 'drizzle-orm';
+import { applyResource, type ResourceKind } from '@/lib/k8s/resources';
+import { sendFeishuNotification } from '@/lib/notify/feishu';
+import { and, desc, eq, isNull } from 'drizzle-orm';
+import yaml from 'yaml';
 
-function renderTemplate(template: unknown, variables: Record<string, string>): unknown {
-  const str = JSON.stringify(template);
-  const rendered = str.replace(/\{\{(\w+)\}\}/g, (_, key) => variables[key] ?? `{{${key}}}`);
-  return JSON.parse(rendered);
+function renderTemplateYaml(templateYaml: string, variables: Record<string, string>): string {
+  return templateYaml.replace(/\{\{(\w+)\}\}/g, (_, key) => variables[key] ?? `{{${key}}}`);
+}
+
+function parseRenderedYaml(rendered: string): any[] {
+  const docs = yaml.parseAllDocuments(rendered);
+  return docs.map(d => d.toJSON()).filter(Boolean);
 }
 
 export async function GET(req: NextRequest) {
@@ -21,8 +26,23 @@ export async function GET(req: NextRequest) {
   const pageSize = parseInt(searchParams.get('pageSize') || '20');
 
   const list = await db
-    .select()
+    .select({
+      id: appReleases.id,
+      appTemplateId: appReleases.appTemplateId,
+      clusterId: appReleases.clusterId,
+      namespace: appReleases.namespace,
+      name: appReleases.name,
+      values: appReleases.values,
+      status: appReleases.status,
+      revision: appReleases.revision,
+      message: appReleases.message,
+      releasedBy: appReleases.releasedBy,
+      createdAt: appReleases.createdAt,
+      updatedAt: appReleases.updatedAt,
+      operator: users.username,
+    })
     .from(appReleases)
+    .leftJoin(users, eq(appReleases.releasedBy, users.id))
     .orderBy(desc(appReleases.createdAt))
     .limit(pageSize)
     .offset((page - 1) * pageSize);
@@ -34,39 +54,73 @@ export async function POST(req: NextRequest) {
   const auth = await validateSession();
   if (!auth) return NextResponse.json({ error: '未登录' }, { status: 401 });
 
-  const { appTemplateId, clusterId, namespace, name, values } = await req.json();
+  const { appTemplateId, clusterId, namespace, name, values, message: msg } = await req.json();
+
+  if (!msg || !msg.trim()) {
+    return NextResponse.json({ error: '请填写变更说明' }, { status: 400 });
+  }
 
   // Load template
   const [template] = await db.select().from(appTemplates).where(eq(appTemplates.id, appTemplateId)).limit(1);
   if (!template) return NextResponse.json({ error: '模板不存在' }, { status: 404 });
 
-  // Render template variables
-  const rendered = renderTemplate(template.template, values || {});
-  const manifests = Array.isArray(rendered) ? rendered : [rendered];
+  // Load cluster info
+  const [cluster] = await db.select().from(clusters).where(eq(clusters.id, clusterId)).limit(1);
+  if (!cluster) return NextResponse.json({ error: '集群不存在' }, { status: 404 });
 
-  // Create release record initially as pending
+  // Get raw YAML from template
+  const templateData = template.template as any;
+  const rawYaml = templateData?.yaml || (typeof templateData === 'string' ? templateData : JSON.stringify(templateData));
+
+  // Render variables at string level (no YAML parsing issues with {{VAR}})
+  const renderedYaml = renderTemplateYaml(rawYaml, values || {});
+
+  // Parse rendered YAML into K8s manifests
+  let manifests: any[];
+  try {
+    manifests = parseRenderedYaml(renderedYaml);
+  } catch (e: any) {
+    return NextResponse.json({ error: '模板渲染后 YAML 解析失败: ' + e.message }, { status: 400 });
+  }
+
+  // Get latest revision for this release name + cluster + namespace
+  const [latest] = await db.select({ revision: appReleases.revision })
+    .from(appReleases)
+    .where(and(
+      eq(appReleases.name, name),
+      eq(appReleases.clusterId, clusterId),
+      namespace ? eq(appReleases.namespace, namespace) : isNull(appReleases.namespace),
+    ))
+    .orderBy(desc(appReleases.revision))
+    .limit(1);
+  const revision = (latest?.revision ?? 0) + 1;
+
+  // Create release record
   const [release] = await db.insert(appReleases).values({
     appTemplateId,
     clusterId,
     namespace,
     name,
     values,
-    renderedManifests: manifests,
+    renderedManifests: { yaml: renderedYaml, manifests },
     status: 'pending',
-    revision: 1,
+    revision,
+    message: msg.trim(),
     releasedBy: auth.user.id,
   }).returning();
 
-  // Apply each resource to K8s
+  // Apply each resource to K8s (create or update, like kubectl apply)
   let status: 'applied' | 'failed' = 'applied';
+  let failError = '';
   try {
     for (const manifest of manifests) {
-      const kind = (manifest as any)?.kind?.toLowerCase() + 's' as ResourceKind;
-      const resourceNamespace = (manifest as any)?.metadata?.namespace || namespace;
-      await createResource(clusterId, kind, manifest, resourceNamespace);
+      const kind = (manifest?.kind?.toLowerCase() + 's') as ResourceKind;
+      const resourceNamespace = manifest?.metadata?.namespace || namespace;
+      await applyResource(clusterId, kind, manifest, resourceNamespace);
     }
   } catch (err: any) {
     status = 'failed';
+    failError = err.message || 'Unknown error';
   }
 
   // Update release status
@@ -86,5 +140,29 @@ export async function POST(req: NextRequest) {
     responseStatus: status === 'applied' ? 201 : 500,
   });
 
+  // Extract image from values or manifests
+  const image = values?.IMAGE || values?.image
+    || manifests[0]?.spec?.template?.spec?.containers?.[0]?.image
+    || '-';
+
+  // Send notification if enabled
+  if (cluster.notifyEnabled && cluster.webhookUrl) {
+    sendFeishuNotification(cluster.webhookUrl, {
+      releaseName: name,
+      clusterName: cluster.displayName || cluster.name,
+      namespace,
+      templateName: template.name,
+      image,
+      revision,
+      status,
+      message: msg.trim(),
+      operator: auth.user.username,
+      time: new Date().toLocaleString('zh-CN'),
+    });
+  }
+
+  if (status === 'failed') {
+    return NextResponse.json({ ...release, status, error: failError }, { status: 500 });
+  }
   return NextResponse.json({ ...release, status }, { status: 201 });
 }
