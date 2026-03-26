@@ -3,7 +3,7 @@ import { db } from '@/lib/db';
 import { users } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { comparePassword } from '@/lib/auth/password';
-import { createSession } from '@/lib/auth/session';
+import { generateToken, setSessionCookie } from '@/lib/auth/session';
 import { loginLimiter } from '@/lib/auth/rate-limit';
 import { writeAuditLog } from '@/lib/audit/logger';
 
@@ -29,8 +29,10 @@ export async function POST(req: NextRequest) {
     await writeAuditLog({ userId: user.id, action: 'login_failed', resourceType: 'user', resourceName: username, ipAddress: ip, requestMethod: 'POST', requestPath: '/api/auth/login', responseStatus: 401 });
     return NextResponse.json({ error: '用户名或密码错误' }, { status: 401 });
   }
-  await createSession(user.id, ip, req.headers.get('user-agent') || undefined);
+  const token = generateToken(user.id);
   await db.update(users).set({ lastLoginAt: new Date(), failedLoginAttempts: 0, lockedUntil: null }).where(eq(users.id, user.id));
   await writeAuditLog({ userId: user.id, action: 'login', resourceType: 'user', resourceName: username, ipAddress: ip, requestMethod: 'POST', requestPath: '/api/auth/login', responseStatus: 200 });
-  return NextResponse.json({ mustChangePassword: user.mustChangePassword });
+  const res = NextResponse.json({ mustChangePassword: user.mustChangePassword });
+  setSessionCookie(res, token);
+  return res;
 }

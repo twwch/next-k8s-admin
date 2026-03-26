@@ -3,7 +3,7 @@ import { db } from '@/lib/db';
 import { users } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { verifyCode } from '@/lib/auth/email';
-import { createSession } from '@/lib/auth/session';
+import { generateToken, setSessionCookie } from '@/lib/auth/session';
 import { writeAuditLog } from '@/lib/audit/logger';
 
 export async function POST(req: NextRequest) {
@@ -13,8 +13,10 @@ export async function POST(req: NextRequest) {
   if (!valid) { return NextResponse.json({ error: '验证码错误或已过期' }, { status: 401 }); }
   const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
   if (!user || !user.isActive) { return NextResponse.json({ error: '用户不存在' }, { status: 401 }); }
-  await createSession(user.id, ip, req.headers.get('user-agent') || undefined);
+  const token = generateToken(user.id);
   await db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, user.id));
   await writeAuditLog({ userId: user.id, action: 'login', resourceType: 'user', resourceName: user.username, ipAddress: ip, requestMethod: 'POST', requestPath: '/api/auth/verify-code', responseStatus: 200 });
-  return NextResponse.json({ mustChangePassword: user.mustChangePassword });
+  const res = NextResponse.json({ mustChangePassword: user.mustChangePassword });
+  setSessionCookie(res, token);
+  return res;
 }
