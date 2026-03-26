@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { Form, Input, Button, Tabs, message } from 'antd';
+import { Form, Input, Button, Tabs, App } from 'antd';
 import { UserOutlined, LockOutlined, MailOutlined } from '@ant-design/icons';
 import { useRouter } from 'next/navigation';
 import AuthBrand from '@/components/auth-brand';
@@ -8,6 +8,7 @@ import { gradientBtnStyle } from '@/lib/styles';
 
 export default function LoginPage() {
   const router = useRouter();
+  const { message } = App.useApp();
   const [loading, setLoading] = useState(false);
   const [countdown, setCountdown] = useState(0);
 

@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { Form, Input, Button, message, Alert } from 'antd';
+import { Form, Input, Button, Alert, App } from 'antd';
 import { LockOutlined } from '@ant-design/icons';
 import { useRouter } from 'next/navigation';
 import AuthBrand from '@/components/auth-brand';
@@ -8,6 +8,7 @@ import { gradientBtnStyle } from '@/lib/styles';
 
 export default function ChangePasswordPage() {
   const router = useRouter();
+  const { message } = App.useApp();
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (values: { currentPassword: string; newPassword: string }) => {
