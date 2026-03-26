@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Tag, Button, Space, message } from 'antd';
+import { Tag, Button, Space, App } from 'antd';
 import { useRouter } from 'next/navigation';
 import ResourceTable from '@/components/resource-table';
 import NamespaceSelector from '@/components/namespace-selector';
@@ -16,6 +16,7 @@ import { isSystemResource } from '@/lib/k8s-helpers';
 import { request } from '@/lib/request';
 
 export default function DeploymentsPage() {
+  const { message } = App.useApp();
   const [namespace, setNamespace] = useState<string | undefined>();
   const { data = [], loading, refresh } = useK8sResource('deployments', namespace);
   const permissions = usePermissions('deployments');

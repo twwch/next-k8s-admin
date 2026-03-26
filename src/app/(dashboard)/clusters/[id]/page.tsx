@@ -1,6 +1,6 @@
 'use client';
 
-import { Card, Descriptions, Tag, Form, Input, Switch, Button, message, Select, Tabs, Space } from 'antd';
+import { Card, Descriptions, Tag, Form, Input, Switch, Button, App, Select, Tabs, Space } from 'antd';
 import { CheckCircleOutlined, CloseCircleOutlined, MinusCircleOutlined, SaveOutlined } from '@ant-design/icons';
 import { useRequest } from 'ahooks';
 import { useParams, useRouter } from 'next/navigation';
@@ -17,6 +17,7 @@ const statusMap: Record<string, { color: string; label: string; icon: React.Reac
 };
 
 export default function ClusterDetailPage() {
+  const { message } = App.useApp();
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const [saving, setSaving] = useState(false);

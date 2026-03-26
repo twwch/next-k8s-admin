@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Tag, Button, Space, message } from 'antd';
+import { Tag, Button, Space, App } from 'antd';
 import ResourceTable from '@/components/resource-table';
 import ResourceDrawer from '@/components/resource-drawer';
 import DeleteConfirm from '@/components/delete-confirm';
@@ -14,6 +14,7 @@ import { isSystemResource } from '@/lib/k8s-helpers';
 import { request } from '@/lib/request';
 
 export default function StorageClassesPage() {
+  const { message } = App.useApp();
   const { data = [], loading, refresh } = useK8sResource('storageclasses');
   const permissions = usePermissions('storageclasses');
   const { clusterId } = useClusterStore();

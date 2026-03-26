@@ -1,6 +1,6 @@
 'use client';
 
-import { Table, Button, Tag, Space, Popconfirm, message } from 'antd';
+import { Table, Button, Tag, Space, Popconfirm, App } from 'antd';
 import { PlusOutlined, DeleteOutlined, LockOutlined, EditOutlined } from '@ant-design/icons';
 import { useRouter } from 'next/navigation';
 import { useRequest } from 'ahooks';
@@ -9,6 +9,7 @@ import { gradientBtnStyle } from '@/lib/styles';
 import { request } from '@/lib/request';
 
 export default function RolesPage() {
+  const { message } = App.useApp();
   const router = useRouter();
 
   const { data: roles = [], loading, refresh } = useRequest(async () => {

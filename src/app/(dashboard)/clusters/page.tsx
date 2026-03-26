@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Button, Table, Tag, Space, Popconfirm, message } from 'antd';
+import { Button, Table, Tag, Space, Popconfirm, App } from 'antd';
 import {
   PlusOutlined, DeleteOutlined, ApiOutlined, EditOutlined,
   CheckCircleOutlined, CloseCircleOutlined, MinusCircleOutlined, LoadingOutlined,
@@ -24,6 +24,7 @@ const authTypeMap: Record<string, string> = {
 };
 
 export default function ClustersPage() {
+  const { message } = App.useApp();
   const router = useRouter();
   const [testingId, setTestingId] = useState<string | null>(null);
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Button, Space, message } from 'antd';
+import { Button, Space, App } from 'antd';
 import ResourceTable from '@/components/resource-table';
 import NamespaceSelector from '@/components/namespace-selector';
 import ResourceDrawer from '@/components/resource-drawer';
@@ -15,6 +15,7 @@ import { isSystemResource } from '@/lib/k8s-helpers';
 import { request } from '@/lib/request';
 
 export default function ConfigMapsPage() {
+  const { message } = App.useApp();
   const [namespace, setNamespace] = useState<string | undefined>();
   const { data = [], loading, refresh } = useK8sResource('configmaps', namespace);
   const permissions = usePermissions('configmaps');

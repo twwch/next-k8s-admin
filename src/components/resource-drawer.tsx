@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { Drawer, Button, Space, message, Tag, Input } from 'antd';
+import { Drawer, Button, Space, App, Tag, Input } from 'antd';
 import { EditOutlined } from '@ant-design/icons';
 import yaml from 'yaml';
 import YamlEditor from '@/components/yaml-editor';
@@ -43,6 +43,7 @@ function cleanForEdit(obj: any): any {
 export default function ResourceDrawer({
   open, mode, kind, kindLabel, record, namespace, permissions, onClose, onSuccess,
 }: ResourceDrawerProps) {
+  const { message } = App.useApp();
   const { clusterId } = useClusterStore();
   const [currentMode, setCurrentMode] = useState(mode);
   const [yamlText, setYamlText] = useState('');

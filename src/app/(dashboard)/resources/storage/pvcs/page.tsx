@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Tag, Button, Space, message } from 'antd';
+import { Tag, Button, Space, App } from 'antd';
 import ResourceTable from '@/components/resource-table';
 import NamespaceSelector from '@/components/namespace-selector';
 import ResourceDrawer from '@/components/resource-drawer';
@@ -21,6 +21,7 @@ const phaseColors: Record<string, string> = {
 };
 
 export default function PVCsPage() {
+  const { message } = App.useApp();
   const [namespace, setNamespace] = useState<string | undefined>();
   const { data = [], loading, refresh } = useK8sResource('persistentvolumeclaims', namespace);
   const permissions = usePermissions('persistentvolumeclaims');

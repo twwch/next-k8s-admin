@@ -1,6 +1,6 @@
 'use client';
 
-import { Form, Input, Select, Button, Card, message, Switch, Divider, Typography } from 'antd';
+import { Form, Input, Select, Button, Card, App, Switch, Divider, Typography } from 'antd';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { gradientBtnStyle } from '@/lib/styles';
@@ -10,6 +10,7 @@ const { TextArea } = Input;
 const { Text } = Typography;
 
 export default function NewClusterPage() {
+  const { message } = App.useApp();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [authType, setAuthType] = useState('token');

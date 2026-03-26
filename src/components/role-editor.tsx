@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Form, Input, Button, Checkbox, Select, Switch, Table, Space, message, Breadcrumb } from 'antd';
+import { Form, Input, Button, Checkbox, Select, Switch, Table, Space, App, Breadcrumb } from 'antd';
 import { ArrowLeftOutlined } from '@ant-design/icons';
 import { useRouter } from 'next/navigation';
 import { useRequest } from 'ahooks';
@@ -21,6 +21,7 @@ interface RoleEditorProps {
 }
 
 export default function RoleEditor({ roleId }: RoleEditorProps) {
+  const { message } = App.useApp();
   const router = useRouter();
   const [form] = Form.useForm();
   const [permissions, setPermissions] = useState<Record<string, string[]>>({});

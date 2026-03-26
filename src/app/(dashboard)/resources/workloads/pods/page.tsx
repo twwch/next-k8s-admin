@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Tag, Space, message } from 'antd';
+import { Tag, Space, App } from 'antd';
 import ResourceTable from '@/components/resource-table';
 import NamespaceSelector from '@/components/namespace-selector';
 import ResourceDrawer from '@/components/resource-drawer';
@@ -22,6 +22,7 @@ const phaseColors: Record<string, string> = {
 };
 
 export default function PodsPage() {
+  const { message } = App.useApp();
   const [namespace, setNamespace] = useState<string | undefined>();
   const { data = [], loading, refresh } = useK8sResource('pods', namespace);
   const permissions = usePermissions('pods');
