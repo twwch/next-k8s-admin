@@ -28,6 +28,7 @@ function cleanForEdit(obj: any): any {
   if (clean.metadata) {
     delete clean.metadata.managedFields;
     delete clean.metadata.uid;
+    delete clean.metadata.resourceVersion;
     delete clean.metadata.generation;
     delete clean.metadata.creationTimestamp;
     delete clean.metadata.selfLink;
@@ -96,6 +97,18 @@ export default function ResourceDrawer({
       const name = record?.metadata?.name;
       const ns = parsed?.metadata?.namespace || namespace || 'default';
       const url = `/api/k8s/${clusterId}/namespaces/${ns}/${kind}/${name}`;
+
+      // Fetch latest resourceVersion to avoid conflict
+      try {
+        const freshRes = await request(url);
+        if (freshRes.ok) {
+          const fresh = await freshRes.json();
+          if (fresh?.metadata?.resourceVersion) {
+            if (!parsed.metadata) parsed.metadata = {};
+            parsed.metadata.resourceVersion = fresh.metadata.resourceVersion;
+          }
+        }
+      } catch { /* proceed with existing resourceVersion */ }
 
       const res = await request(url, {
         method: 'PUT',
@@ -230,7 +243,7 @@ export default function ResourceDrawer({
       {currentMode === 'edit' ? (
         <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
           {/* 左：原始版本 */}
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: '1px solid #21262d' }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', borderRight: '1px solid #21262d' }}>
             <div style={{
               padding: '6px 14px',
               background: '#161b22',
@@ -246,7 +259,7 @@ export default function ResourceDrawer({
             </div>
           </div>
           {/* 右：编辑区 */}
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             <div style={{
               padding: '6px 14px',
               background: '#161b22',
