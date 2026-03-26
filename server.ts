@@ -20,7 +20,11 @@ async function autoSeed() {
 
     // Check if admin user exists
     const existingAdmin = await db.select().from(users).where(eq(users.username, 'admin')).limit(1);
-    if (existingAdmin.length > 0) return;
+    if (existingAdmin.length > 0) {
+      console.log('> Admin user already exists, skipping seed');
+      return;
+    }
+    console.log('> First startup detected, seeding database...');
 
     // Seed built-in roles
     const BUILT_IN_ROLES = [
@@ -71,8 +75,8 @@ async function autoSeed() {
     console.log('='.repeat(50));
     console.log('');
   } catch (err) {
-    // DB not ready or already seeded — skip silently
-    console.error('Auto-seed skipped:', (err as Error).message);
+    console.error('> Auto-seed failed:');
+    console.error(err);
   }
 }
 
