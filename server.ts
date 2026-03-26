@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { createServer } from 'http';
 import { parse } from 'url';
 import next from 'next';
+import path from 'path';
 
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = '0.0.0.0';
@@ -9,6 +10,75 @@ const port = parseInt(process.env.PORT || '3000');
 
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
+
+async function autoCreateDatabase() {
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) {
+    console.error('> DATABASE_URL is not set, skipping database creation');
+    return;
+  }
+
+  try {
+    const url = new URL(databaseUrl);
+    const dbName = url.pathname.slice(1); // remove leading '/'
+    if (!dbName) return;
+
+    // Connect to default 'postgres' database to create target database
+    url.pathname = '/postgres';
+    const postgres = (await import('postgres')).default;
+    const adminSql = postgres(url.toString());
+
+    const result = await adminSql`SELECT 1 FROM pg_database WHERE datname = ${dbName}`;
+    if (result.length === 0) {
+      console.log(`> Database "${dbName}" does not exist, creating...`);
+      await adminSql.unsafe(`CREATE DATABASE "${dbName}"`);
+      console.log(`> Database "${dbName}" created successfully`);
+    } else {
+      console.log(`> Database "${dbName}" already exists`);
+    }
+    await adminSql.end();
+  } catch (err) {
+    console.error('> Auto-create database failed:', err);
+  }
+}
+
+async function autoMigrate() {
+  try {
+    const postgres = (await import('postgres')).default;
+    const sql = postgres(process.env.DATABASE_URL!);
+    const fs = await import('fs');
+
+    const migrationsDir = path.join(process.cwd(), 'drizzle');
+    const files = fs.readdirSync(migrationsDir).filter((f: string) => f.endsWith('.sql')).sort();
+
+    for (const file of files) {
+      const filePath = path.join(migrationsDir, file);
+      const content = fs.readFileSync(filePath, 'utf-8');
+      // Split by drizzle's statement breakpoint marker
+      const statements = content.split('--> statement-breakpoint').map((s: string) => s.trim()).filter(Boolean);
+
+      for (const stmt of statements) {
+        try {
+          await sql.unsafe(stmt);
+        } catch (err: unknown) {
+          const pgErr = err as { code?: string };
+          // 42710: duplicate enum, 42P07: duplicate table, 42701: duplicate column, 42P16: duplicate constraint
+          if (['42710', '42P07', '42701', '42P16'].includes(pgErr.code || '')) {
+            // Already exists, skip
+          } else {
+            console.warn(`> Migration warning (${file}):`, (err as Error).message);
+          }
+        }
+      }
+      console.log(`> Migration applied: ${file}`);
+    }
+
+    await sql.end();
+    console.log('> Database migrations completed');
+  } catch (err) {
+    console.error('> Auto-migrate failed:', err);
+  }
+}
 
 async function autoSeed() {
   try {
@@ -81,7 +151,9 @@ async function autoSeed() {
 }
 
 app.prepare().then(async () => {
-  // Auto-seed on first startup
+  // Auto-initialize database on startup
+  await autoCreateDatabase();
+  await autoMigrate();
   await autoSeed();
 
   const server = createServer((req, res) => {
