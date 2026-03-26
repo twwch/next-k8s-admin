@@ -18,7 +18,7 @@ export default function ChangePasswordPage() {
       const data = await res.json();
       if (!res.ok) { message.error(data.error); return; }
       message.success('密码修改成功');
-      router.push('/');
+      window.location.href = '/';
     } finally { setLoading(false); }
   };
 

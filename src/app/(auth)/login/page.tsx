@@ -18,7 +18,7 @@ export default function LoginPage() {
       const res = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(values) });
       const data = await res.json();
       if (!res.ok) { message.error(data.error); return; }
-      if (data.mustChangePassword) { router.push('/change-password'); } else { router.push('/'); }
+      if (data.mustChangePassword) { window.location.href = '/change-password'; } else { window.location.href = '/'; }
     } finally { setLoading(false); }
   };
 
@@ -37,7 +37,7 @@ export default function LoginPage() {
       const res = await fetch('/api/auth/verify-code', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(values) });
       const data = await res.json();
       if (!res.ok) { message.error(data.error); return; }
-      if (data.mustChangePassword) { router.push('/change-password'); } else { router.push('/'); }
+      if (data.mustChangePassword) { window.location.href = '/change-password'; } else { window.location.href = '/'; }
     } finally { setLoading(false); }
   };
 
