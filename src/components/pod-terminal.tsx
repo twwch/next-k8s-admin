@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Modal, Select, Space, Alert, Tag } from 'antd';
+import { request } from '@/lib/request';
 
 interface Props {
   open: boolean;
@@ -92,7 +93,7 @@ export default function PodTerminal({ open, onClose, clusterId, namespace, podNa
     // Fetch WS token
     let wsToken: string;
     try {
-      const tokenRes = await fetch('/api/auth/me', { credentials: 'include' });
+      const tokenRes = await request('/api/auth/me', { credentials: 'include' });
       if (!tokenRes.ok) {
         setError('认证失败，请重新登录');
         return;

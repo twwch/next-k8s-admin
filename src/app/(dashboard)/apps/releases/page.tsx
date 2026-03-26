@@ -3,6 +3,7 @@
 import { Table, Tag } from 'antd';
 import { useRequest } from 'ahooks';
 import PageContainer from '@/components/page-container';
+import { request } from '@/lib/request';
 
 const statusColors: Record<string, string> = {
   applied: 'green',
@@ -13,7 +14,7 @@ const statusColors: Record<string, string> = {
 
 export default function ReleasesPage() {
   const { data: releases = [], loading } = useRequest(async () => {
-    const res = await fetch('/api/apps/releases');
+    const res = await request('/api/apps/releases');
     return res.json();
   });
 

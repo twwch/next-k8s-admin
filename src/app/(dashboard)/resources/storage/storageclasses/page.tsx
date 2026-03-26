@@ -11,6 +11,7 @@ import { useClusterStore } from '@/hooks/use-cluster';
 import PageContainer from '@/components/page-container';
 import { gradientBtnStyle } from '@/lib/styles';
 import { isSystemResource } from '@/lib/k8s-helpers';
+import { request } from '@/lib/request';
 
 export default function StorageClassesPage() {
   const { data = [], loading, refresh } = useK8sResource('storageclasses');
@@ -21,7 +22,7 @@ export default function StorageClassesPage() {
   const handleDelete = async (record: any) => {
     const name = record.metadata?.name;
     if (!clusterId || !name) return;
-    const res = await fetch(`/api/k8s/${clusterId}/storageclasses/${name}`, { method: 'DELETE' });
+    const res = await request(`/api/k8s/${clusterId}/storageclasses/${name}`, { method: 'DELETE' });
     if (res.ok) { message.success(`StorageClass ${name} 已删除`); refresh(); }
     else { const d = await res.json().catch(() => ({})); message.error(d.error || '删除失败'); }
   };

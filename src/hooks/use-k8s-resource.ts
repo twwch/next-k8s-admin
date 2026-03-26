@@ -2,6 +2,7 @@
 
 import { useRequest } from 'ahooks';
 import { useClusterStore } from './use-cluster';
+import { request } from '@/lib/request';
 
 export function useK8sResource(kind: string, namespace?: string) {
   const { clusterId } = useClusterStore();
@@ -13,7 +14,7 @@ export function useK8sResource(kind: string, namespace?: string) {
   return useRequest(
     async () => {
       if (!clusterId) return [];
-      const res = await fetch(path);
+      const res = await request(path);
       if (!res.ok) throw new Error('Failed to fetch');
       return res.json();
     },

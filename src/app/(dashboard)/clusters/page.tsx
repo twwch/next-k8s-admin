@@ -10,6 +10,7 @@ import { useRouter } from 'next/navigation';
 import { useRequest } from 'ahooks';
 import PageContainer from '@/components/page-container';
 import { gradientBtnStyle } from '@/lib/styles';
+import { request } from '@/lib/request';
 
 const statusMap: Record<string, { color: string; label: string; icon: React.ReactNode }> = {
   connected: { color: 'success', label: '已连接', icon: <CheckCircleOutlined /> },
@@ -27,14 +28,14 @@ export default function ClustersPage() {
   const [testingId, setTestingId] = useState<string | null>(null);
 
   const { data: clusters = [], loading, refresh } = useRequest(async () => {
-    const res = await fetch('/api/clusters');
+    const res = await request('/api/clusters');
     return res.json();
   });
 
   const handleTest = async (id: string) => {
     setTestingId(id);
     try {
-      const res = await fetch(`/api/clusters/${id}/test`, { method: 'POST' });
+      const res = await request(`/api/clusters/${id}/test`, { method: 'POST' });
       const data = await res.json();
       if (data.success) {
         message.success(`连接成功，K8s 版本: ${data.version}`);
@@ -48,7 +49,7 @@ export default function ClustersPage() {
   };
 
   const handleDelete = async (id: string) => {
-    const res = await fetch(`/api/clusters/${id}`, { method: 'DELETE' });
+    const res = await request(`/api/clusters/${id}`, { method: 'DELETE' });
     if (!res.ok) {
       const data = await res.json();
       message.error(data.error || '删除失败');

@@ -1,22 +1,25 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Drawer, Button, Space, message, Tag, Input } from 'antd';
+import { EditOutlined } from '@ant-design/icons';
 import yaml from 'yaml';
 import YamlEditor from '@/components/yaml-editor';
 import { RESOURCE_TEMPLATES } from '@/components/resource-templates';
 import { useClusterStore } from '@/hooks/use-cluster';
+import { gradientBtnStyle } from '@/lib/styles';
+import { request } from '@/lib/request';
 
 interface ResourceDrawerProps {
   open: boolean;
   mode: 'view' | 'edit' | 'create';
   kind: string;
   kindLabel: string;
-  record?: any;              // K8s resource object (view/edit modes)
-  namespace?: string;        // fallback namespace for create
+  record?: any;
+  namespace?: string;
   permissions: { canUpdate: boolean };
   onClose: () => void;
-  onSuccess: () => void;     // refresh list after create/edit
+  onSuccess: () => void;
 }
 
 function cleanForEdit(obj: any): any {
@@ -38,19 +41,12 @@ function cleanForEdit(obj: any): any {
 }
 
 export default function ResourceDrawer({
-  open,
-  mode,
-  kind,
-  kindLabel,
-  record,
-  namespace,
-  permissions,
-  onClose,
-  onSuccess,
+  open, mode, kind, kindLabel, record, namespace, permissions, onClose, onSuccess,
 }: ResourceDrawerProps) {
   const { clusterId } = useClusterStore();
   const [currentMode, setCurrentMode] = useState(mode);
   const [yamlText, setYamlText] = useState('');
+  const [originalYaml, setOriginalYaml] = useState('');
   const [changeMessage, setChangeMessage] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -64,14 +60,12 @@ export default function ResourceDrawer({
     if (mode === 'view' && record) {
       setYamlText(yaml.stringify(record));
     } else if (mode === 'edit' && record) {
-      setYamlText(yaml.stringify(cleanForEdit(record)));
+      const cleaned = yaml.stringify(cleanForEdit(record));
+      setYamlText(cleaned);
+      setOriginalYaml(cleaned);
     } else if (mode === 'create') {
-      const templates = RESOURCE_TEMPLATES[kind];
-      if (templates && templates.length > 0) {
-        setYamlText('');
-      } else {
-        setYamlText('');
-      }
+      setYamlText('');
+      setOriginalYaml('');
     }
   }, [open, mode, record, kind]);
 
@@ -80,55 +74,40 @@ export default function ResourceDrawer({
     if (currentMode === 'view' && record) {
       setYamlText(yaml.stringify(record));
     } else if (currentMode === 'edit' && record) {
-      setYamlText(yaml.stringify(cleanForEdit(record)));
+      const cleaned = yaml.stringify(cleanForEdit(record));
+      setYamlText(cleaned);
+      setOriginalYaml(cleaned);
     }
   }, [currentMode]);
 
   const handleSave = async () => {
     if (!clusterId) return;
-    if (!changeMessage.trim()) {
+    if (kind === 'deployments' && !changeMessage.trim()) {
       message.warning('请填写变更说明');
       return;
     }
     setLoading(true);
     try {
       let parsed: any;
-      try {
-        parsed = yaml.parse(yamlText);
-      } catch (e: any) {
-        message.error(`YAML 格式错误: ${e.message}`);
-        return;
-      }
+      try { parsed = yaml.parse(yamlText); }
+      catch (e: any) { message.error(`YAML 格式错误: ${e.message}`); return; }
 
       const name = record?.metadata?.name;
       const ns = parsed?.metadata?.namespace || namespace || 'default';
       const url = `/api/k8s/${clusterId}/namespaces/${ns}/${kind}/${name}`;
 
-      const res = await fetch(url, {
+      const res = await request(url, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Change-Message': changeMessage.trim(),
-        },
+        headers: { 'Content-Type': 'application/json', 'X-Change-Message': encodeURIComponent(changeMessage.trim()) },
         body: JSON.stringify(parsed),
       });
 
-      if (res.status === 409) {
-        message.error('资源已被其他人修改，请刷新后重试');
-        return;
-      }
-
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        message.error(`操作失败: ${d.error || res.statusText}`);
-        return;
-      }
+      if (res.status === 409) { message.error('资源已被其他人修改，请刷新后重试'); return; }
+      if (!res.ok) { const d = await res.json().catch(() => ({})); message.error(`操作失败: ${d.error || res.statusText}`); return; }
 
       message.success(`${kindLabel} 已更新`);
       onSuccess();
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   const handleCreate = async () => {
@@ -136,12 +115,8 @@ export default function ResourceDrawer({
     setLoading(true);
     try {
       let docs: any[];
-      try {
-        docs = yaml.parseAllDocuments(yamlText).map((d) => d.toJS());
-      } catch (e: any) {
-        message.error(`YAML 格式错误: ${e.message}`);
-        return;
-      }
+      try { docs = yaml.parseAllDocuments(yamlText).map((d) => d.toJS()); }
+      catch (e: any) { message.error(`YAML 格式错误: ${e.message}`); return; }
 
       const results: { success: boolean; kind: string; name: string; error?: string }[] = [];
 
@@ -150,113 +125,98 @@ export default function ResourceDrawer({
         const docKind = doc.kind?.toLowerCase() + 's';
         const docNs = doc.metadata?.namespace || namespace || 'default';
         const docName = doc.metadata?.name || '';
-
-        // Cluster-scoped resources don't use namespace path
         const clusterScoped = ['storageclasses', 'namespaces'].includes(docKind);
         const url = clusterScoped
           ? `/api/k8s/${clusterId}/${docKind}`
           : `/api/k8s/${clusterId}/namespaces/${docNs}/${docKind}`;
 
-        const res = await fetch(url, {
+        const res = await request(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(doc),
         });
 
-        if (res.ok) {
-          results.push({ success: true, kind: doc.kind || docKind, name: docName });
-        } else {
-          const d = await res.json().catch(() => ({}));
-          results.push({ success: false, kind: doc.kind || docKind, name: docName, error: d.error || res.statusText });
-        }
+        if (res.ok) { results.push({ success: true, kind: doc.kind || docKind, name: docName }); }
+        else { const d = await res.json().catch(() => ({})); results.push({ success: false, kind: doc.kind || docKind, name: docName, error: d.error || res.statusText }); }
       }
 
       const failed = results.filter((r) => !r.success);
       const succeeded = results.filter((r) => r.success);
 
-      if (failed.length === 0) {
-        message.success(`${kindLabel} 创建成功`);
-        onSuccess();
-      } else if (succeeded.length > 0) {
-        message.warning(`部分资源创建成功，${failed.map((f) => `${f.kind} 创建失败: ${f.error}`).join('; ')}`);
-        onSuccess();
-      } else {
-        message.error(`操作失败: ${failed.map((f) => f.error).join('; ')}`);
-      }
-    } finally {
-      setLoading(false);
-    }
+      if (failed.length === 0) { message.success(`${kindLabel} 创建成功`); onSuccess(); }
+      else if (succeeded.length > 0) { message.warning(`部分资源创建成功，${failed.map((f) => `${f.kind} 创建失败: ${f.error}`).join('; ')}`); onSuccess(); }
+      else { message.error(`操作失败: ${failed.map((f) => f.error).join('; ')}`); }
+    } finally { setLoading(false); }
   };
 
   const templates = RESOURCE_TEMPLATES[kind] || [];
 
-  const title = currentMode === 'view'
-    ? record?.metadata?.name || kindLabel
-    : currentMode === 'edit'
-    ? `编辑 ${record?.metadata?.name || kindLabel}`
-    : `创建 ${kindLabel}`;
+  const hasChanges = useMemo(() => yamlText !== originalYaml, [yamlText, originalYaml]);
 
-  const extraButtons = currentMode === 'view' && permissions.canUpdate ? (
-    <Button type="default" onClick={() => setCurrentMode('edit')}>编辑</Button>
-  ) : null;
+  const title = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <span style={{ fontWeight: 600 }}>
+        {currentMode === 'view' ? record?.metadata?.name || kindLabel
+          : currentMode === 'edit' ? `编辑 ${record?.metadata?.name || kindLabel}`
+          : `创建 ${kindLabel}`}
+      </span>
+      <Tag color="blue" style={{ marginLeft: 4, fontSize: 11 }}>{kindLabel}</Tag>
+      {currentMode === 'view' && permissions.canUpdate && (
+        <Button size="small" icon={<EditOutlined />} onClick={() => setCurrentMode('edit')}>编辑</Button>
+      )}
+    </div>
+  );
 
   const footer = currentMode === 'edit' ? (
-    <div>
-      <div style={{ marginBottom: 8 }}>
-        <Input.TextArea
-          placeholder="变更说明（必填）"
-          value={changeMessage}
-          onChange={(e) => setChangeMessage(e.target.value)}
-          rows={2}
-          maxLength={500}
-          showCount
-        />
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <Space>
-          <Button onClick={() => setCurrentMode('view')}>取消</Button>
-          <Button type="primary" loading={loading} onClick={handleSave}>保存</Button>
-        </Space>
-      </div>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <Input
+        placeholder={kind === 'deployments' ? '变更说明（必填）' : '变更说明（选填）'}
+        value={changeMessage}
+        onChange={(e) => setChangeMessage(e.target.value)}
+        style={{ flex: 1 }}
+        maxLength={500}
+      />
+      <Button onClick={() => setCurrentMode('view')}>取消</Button>
+      <Button type="primary" loading={loading} onClick={handleSave} disabled={!hasChanges} style={gradientBtnStyle}>保存</Button>
     </div>
   ) : currentMode === 'create' ? (
-    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-      <Space>
-        <Button onClick={onClose}>取消</Button>
-        <Button type="primary" loading={loading} onClick={handleCreate}>创建</Button>
-      </Space>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ flex: 1 }} />
+      <Button onClick={onClose}>取消</Button>
+      <Button type="primary" loading={loading} onClick={handleCreate} style={gradientBtnStyle}>创建</Button>
     </div>
   ) : null;
+
+  const drawerWidth = currentMode === 'edit' ? '85vw' : 800;
 
   return (
     <Drawer
-      title={
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span>{title}</span>
-          {extraButtons}
-        </div>
-      }
+      title={title}
       open={open}
       onClose={onClose}
-      width={700}
+      width={drawerWidth}
       footer={footer}
       destroyOnHidden
+      styles={{ body: { padding: 0, display: 'flex', flexDirection: 'column' } }}
     >
+      {/* 模板选择 */}
       {currentMode === 'create' && templates.length > 0 && (
-        <div style={{ marginBottom: 12 }}>
-          <div style={{ marginBottom: 8, color: '#595959' }}>选择模板：</div>
-          <Space wrap>
+        <div style={{ padding: '12px 16px', borderBottom: '1px solid #f0f0f0' }}>
+          <Space wrap size={[6, 6]}>
+            <span style={{ color: '#94a3b8', fontSize: 12 }}>模板:</span>
             {templates.map((t) => (
               <Tag
                 key={t.label}
-                style={{ cursor: 'pointer', padding: '4px 8px' }}
+                style={{ cursor: 'pointer', padding: '2px 10px', borderRadius: 12, fontSize: 12 }}
+                color={yamlText === t.yaml ? 'blue' : undefined}
                 onClick={() => setYamlText(t.yaml)}
               >
                 {t.label}
               </Tag>
             ))}
             <Tag
-              style={{ cursor: 'pointer', padding: '4px 8px' }}
+              style={{ cursor: 'pointer', padding: '2px 10px', borderRadius: 12, fontSize: 12 }}
+              color={yamlText === '' ? 'blue' : undefined}
               onClick={() => setYamlText('')}
             >
               空白
@@ -264,12 +224,59 @@ export default function ResourceDrawer({
           </Space>
         </div>
       )}
-      <YamlEditor
-        value={yamlText}
-        onChange={setYamlText}
-        readOnly={currentMode === 'view'}
-        height={currentMode === 'view' ? 560 : 500}
-      />
+
+      {/* 编辑模式：分屏 */}
+      {currentMode === 'edit' ? (
+        <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+          {/* 左：原始版本 */}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: '1px solid #21262d' }}>
+            <div style={{
+              padding: '6px 14px',
+              background: '#161b22',
+              borderBottom: '1px solid #21262d',
+              fontSize: 11,
+              color: '#8b949e',
+              fontWeight: 500,
+            }}>
+              当前版本（只读）
+            </div>
+            <div style={{ flex: 1, overflow: 'auto' }}>
+              <YamlEditor value={originalYaml} readOnly height="100%" />
+            </div>
+          </div>
+          {/* 右：编辑区 */}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+            <div style={{
+              padding: '6px 14px',
+              background: '#161b22',
+              borderBottom: '1px solid #21262d',
+              fontSize: 11,
+              color: '#58a6ff',
+              fontWeight: 500,
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+            }}>
+              <span>编辑中</span>
+              {hasChanges && <span style={{ color: '#3fb950', fontSize: 10 }}>有变更</span>}
+            </div>
+            <div style={{ flex: 1, overflow: 'auto' }}>
+              <YamlEditor value={yamlText} onChange={setYamlText} diffBase={originalYaml} height="100%" />
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* 查看/创建模式：单编辑器 */
+        <div style={{ flex: 1, overflow: 'auto' }}>
+          <YamlEditor
+            value={yamlText}
+            onChange={currentMode === 'create' ? setYamlText : undefined}
+            readOnly={currentMode === 'view'}
+            height="100%"
+            placeholder={currentMode === 'create' ? '粘贴或编写 YAML...' : undefined}
+          />
+        </div>
+      )}
     </Drawer>
   );
 }

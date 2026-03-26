@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Modal, Select, Space, Spin, Typography, Button } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
+import { request } from '@/lib/request';
 
 interface Props {
   open: boolean;
@@ -26,7 +27,7 @@ export default function PodLogViewer({ open, onClose, clusterId, namespace, podN
     try {
       const params = new URLSearchParams({ tailLines: '500' });
       if (c) params.set('container', c);
-      const res = await fetch(`/api/k8s/${clusterId}/logs/${namespace}/${podName}?${params.toString()}`);
+      const res = await request(`/api/k8s/${clusterId}/logs/${namespace}/${podName}?${params.toString()}`);
       if (res.ok) {
         const text = await res.text();
         setLogs(text);

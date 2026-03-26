@@ -4,6 +4,7 @@ import { Form, Input, Select, Button, Card, message, Switch, Divider, Typography
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { gradientBtnStyle } from '@/lib/styles';
+import { request } from '@/lib/request';
 
 const { TextArea } = Input;
 const { Text } = Typography;
@@ -17,7 +18,7 @@ export default function NewClusterPage() {
   const handleSubmit = async (values: any) => {
     setLoading(true);
     try {
-      const res = await fetch('/api/clusters', {
+      const res = await request('/api/clusters', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...values, notifyEnabled }),

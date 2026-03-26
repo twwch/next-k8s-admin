@@ -7,6 +7,7 @@ import {
 } from '@ant-design/icons';
 import { useRequest } from 'ahooks';
 import StatCard from '@/components/stat-card';
+import { request } from '@/lib/request';
 
 const { Text } = Typography;
 
@@ -23,7 +24,7 @@ const eventTypeColor: Record<string, string> = {
 
 export default function DashboardPage() {
   const { data, loading } = useRequest(async () => {
-    const res = await fetch('/api/dashboard');
+    const res = await request('/api/dashboard');
     if (!res.ok) return null;
     return res.json();
   }, { pollingInterval: 30000 });

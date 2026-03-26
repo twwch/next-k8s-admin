@@ -15,6 +15,7 @@ import { usePermissions } from '@/hooks/use-permissions';
 import ResourceDrawer from '@/components/resource-drawer';
 import PodLogViewer from '@/components/pod-log-viewer';
 import PodTerminal from '@/components/pod-terminal';
+import { request } from '@/lib/request';
 
 const { Title, Text } = Typography;
 
@@ -59,7 +60,7 @@ export default function DeploymentDetailPage() {
     setLoadingDeployment(true);
     setError(null);
     try {
-      const res = await fetch(`/api/k8s/${clusterId}/namespaces/${namespace}/deployments/${name}`);
+      const res = await request(`/api/k8s/${clusterId}/namespaces/${namespace}/deployments/${name}`);
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
         setError(d.error || 'Failed to fetch deployment');
@@ -79,7 +80,7 @@ export default function DeploymentDetailPage() {
     if (!clusterId) return;
     setLoadingPods(true);
     try {
-      const res = await fetch(`/api/k8s/${clusterId}/namespaces/${namespace}/pods`);
+      const res = await request(`/api/k8s/${clusterId}/namespaces/${namespace}/pods`);
       if (!res.ok) return;
       const allPods: any[] = await res.json();
       const matchLabels: Record<string, string> = dep?.spec?.selector?.matchLabels || {};
@@ -110,11 +111,11 @@ export default function DeploymentDetailPage() {
       if (!patch.spec.template.metadata.annotations) patch.spec.template.metadata.annotations = {};
       patch.spec.template.metadata.annotations['kubectl.kubernetes.io/restartedAt'] = new Date().toISOString();
 
-      const res = await fetch(`/api/k8s/${clusterId}/namespaces/${namespace}/deployments/${name}`, {
+      const res = await request(`/api/k8s/${clusterId}/namespaces/${namespace}/deployments/${name}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'X-Change-Message': '重新部署 (Rollout Restart)',
+          'X-Change-Message': encodeURIComponent('重新部署 (Rollout Restart)'),
         },
         body: JSON.stringify(patch),
       });
@@ -136,7 +137,7 @@ export default function DeploymentDetailPage() {
     setRollingBack(true);
     try {
       // Get the deployment's revision history via ReplicaSets
-      const res = await fetch(`/api/k8s/${clusterId}/namespaces/${namespace}/replicasets`);
+      const res = await request(`/api/k8s/${clusterId}/namespaces/${namespace}/replicasets`);
       if (!res.ok) { message.error('获取 ReplicaSet 失败'); return; }
       const allRS: any[] = await res.json();
 
@@ -167,11 +168,11 @@ export default function DeploymentDetailPage() {
       const patch = JSON.parse(JSON.stringify(deployment));
       patch.spec.template = previousRS.spec.template;
 
-      const updateRes = await fetch(`/api/k8s/${clusterId}/namespaces/${namespace}/deployments/${name}`, {
+      const updateRes = await request(`/api/k8s/${clusterId}/namespaces/${namespace}/deployments/${name}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'X-Change-Message': `回滚到上一版本 (镜像: ${previousImage})`,
+          'X-Change-Message': encodeURIComponent(`回滚到上一版本 (镜像: ${previousImage})`),
         },
         body: JSON.stringify(patch),
       });

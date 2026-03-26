@@ -4,6 +4,7 @@ import { Dropdown } from 'antd';
 import { DownOutlined } from '@ant-design/icons';
 import { useClusterStore } from '@/hooks/use-cluster';
 import { useRequest } from 'ahooks';
+import { request } from '@/lib/request';
 
 const statusColors: Record<string, string> = {
   connected: '#4ade80',
@@ -15,7 +16,7 @@ export default function ClusterSelector() {
   const { clusterId, clusterName, setCluster } = useClusterStore();
 
   const { data: clusters = [] } = useRequest(async () => {
-    const res = await fetch('/api/clusters');
+    const res = await request('/api/clusters');
     if (!res.ok) return [];
     return res.json();
   });
@@ -41,24 +42,26 @@ export default function ClusterSelector() {
   return (
     <Dropdown menu={{ items, selectedKeys: clusterId ? [clusterId] : [] }} trigger={['click']}>
       <div style={{
-        display: 'flex',
+        display: 'inline-flex',
         alignItems: 'center',
-        gap: 8,
+        gap: 6,
         background: 'linear-gradient(135deg, #326CE5, #1a4bc7)',
-        borderRadius: 20,
-        padding: '5px 14px',
+        borderRadius: 100,
+        padding: '4px 12px',
         cursor: 'pointer',
         userSelect: 'none',
+        lineHeight: 1,
+        height: 28,
       }}>
         <span style={{
           width: 6, height: 6, borderRadius: '50%',
           background: statusColor,
           flexShrink: 0,
         }} />
-        <span style={{ fontSize: 13, fontWeight: 500, color: 'white' }}>
+        <span style={{ fontSize: 12, fontWeight: 500, color: 'white', whiteSpace: 'nowrap' }}>
           {clusterName || '选择集群'}
         </span>
-        <DownOutlined style={{ fontSize: 10, color: 'rgba(255,255,255,0.6)' }} />
+        <DownOutlined style={{ fontSize: 8, color: 'rgba(255,255,255,0.5)' }} />
       </div>
     </Dropdown>
   );

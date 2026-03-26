@@ -8,6 +8,7 @@ import { PlusOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons';
 import { useRequest } from 'ahooks';
 import PageContainer from '@/components/page-container';
 import { gradientBtnStyle } from '@/lib/styles';
+import { request } from '@/lib/request';
 
 export default function UsersPage() {
   const [addOpen, setAddOpen] = useState(false);
@@ -16,20 +17,23 @@ export default function UsersPage() {
   const [editForm] = Form.useForm();
 
   const { data: users = [], loading, refresh } = useRequest(async () => {
-    const res = await fetch('/api/admin/users');
+    const res = await request('/api/admin/users');
     return res.json();
   });
 
   const { data: roles = [] } = useRequest(async () => {
-    const res = await fetch('/api/admin/roles');
+    const res = await request('/api/admin/roles');
     return res.json();
   });
 
   const handleAdd = async (values: any) => {
-    const res = await fetch('/api/admin/users', {
+    const { roleId, ...rest } = values;
+    const roleBindings = roleId ? [{ roleId }] : [];
+
+    const res = await request('/api/admin/users', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(values),
+      body: JSON.stringify({ ...rest, roleBindings }),
     });
     if (res.ok) {
       message.success('用户创建成功');
@@ -43,7 +47,7 @@ export default function UsersPage() {
   };
 
   const handleEdit = async (values: any) => {
-    const res = await fetch(`/api/admin/users/${editUser.id}`, {
+    const res = await request(`/api/admin/users/${editUser.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...values, username: editUser.username }),
@@ -58,7 +62,7 @@ export default function UsersPage() {
   };
 
   const handleDelete = async (id: string) => {
-    const res = await fetch(`/api/admin/users/${id}`, { method: 'DELETE' });
+    const res = await request(`/api/admin/users/${id}`, { method: 'DELETE' });
     if (!res.ok) {
       const data = await res.json();
       message.error(data.error || '删除失败');
@@ -72,44 +76,39 @@ export default function UsersPage() {
     { title: '用户名', dataIndex: 'username', key: 'username' },
     { title: '邮箱', dataIndex: 'email', key: 'email' },
     {
-      title: '状态',
-      dataIndex: 'isActive',
-      key: 'isActive',
+      title: '角色', key: 'role',
+      render: (_: any, record: any) => {
+        const roleId = record.roleBindings?.[0]?.roleId;
+        const role = roles.find((r: any) => r.id === roleId);
+        return role ? <Tag color="blue">{role.displayName}</Tag> : <Tag>无</Tag>;
+      },
+    },
+    {
+      title: '状态', dataIndex: 'isActive', key: 'isActive',
       render: (v: boolean) => <Tag color={v ? 'green' : 'red'}>{v ? '启用' : '禁用'}</Tag>,
     },
     {
-      title: '需要改密',
-      dataIndex: 'mustChangePassword',
-      key: 'mustChangePassword',
-      render: (v: boolean) => v ? <Tag color="orange">是</Tag> : <Tag>否</Tag>,
-    },
-    {
-      title: '最后登录',
-      dataIndex: 'lastLoginAt',
-      key: 'lastLoginAt',
+      title: '最后登录', dataIndex: 'lastLoginAt', key: 'lastLoginAt',
       render: (t: string) => t ? new Date(t).toLocaleString() : '-',
     },
     {
-      title: '创建时间',
-      dataIndex: 'createdAt',
-      key: 'createdAt',
+      title: '创建时间', dataIndex: 'createdAt', key: 'createdAt',
       render: (t: string) => new Date(t).toLocaleString(),
     },
     {
-      title: '操作',
-      key: 'actions',
+      title: '操作', key: 'actions',
       render: (_: any, record: any) => (
         <Space>
-          <Button
-            size="small"
-            icon={<EditOutlined />}
+          <Button size="small" icon={<EditOutlined />}
             onClick={() => {
               setEditUser(record);
-              editForm.setFieldsValue({ email: record.email, isActive: record.isActive });
+              editForm.setFieldsValue({
+                email: record.email,
+                isActive: record.isActive,
+                roleId: record.roleBindings?.[0]?.roleId,
+              });
             }}
-          >
-            编辑
-          </Button>
+          >编辑</Button>
           {record.username !== 'admin' && (
             <Popconfirm title="确认删除此用户?" onConfirm={() => handleDelete(record.id)}>
               <Button size="small" danger icon={<DeleteOutlined />}>删除</Button>
@@ -134,45 +133,28 @@ export default function UsersPage() {
         <Table columns={columns} dataSource={users} rowKey="id" loading={loading} size="middle" />
       </PageContainer>
 
-      {/* Add User Modal */}
-      <Modal
-        title="添加用户"
-        open={addOpen}
+      <Modal title="添加用户" open={addOpen}
         onCancel={() => { setAddOpen(false); addForm.resetFields(); }}
-        onOk={() => addForm.submit()}
-        destroyOnHidden
-      >
+        onOk={() => addForm.submit()} destroyOnHidden>
         <Form form={addForm} layout="vertical" onFinish={handleAdd}>
-          <Form.Item name="username" label="用户名" rules={[{ required: true }]}>
-            <Input />
-          </Form.Item>
-          <Form.Item name="email" label="邮箱" rules={[{ required: true, type: 'email' }]}>
-            <Input />
-          </Form.Item>
-          <Form.Item name="password" label="初始密码" rules={[{ required: true, min: 6 }]}>
-            <Input.Password />
-          </Form.Item>
-          <Form.Item name={['roleBindings', 0, 'roleId']} label="角色">
-            <Select
-              placeholder="选择角色"
-              allowClear
-              options={roles.map((r: any) => ({ value: r.id, label: r.displayName }))}
-            />
+          <Form.Item name="username" label="用户名" rules={[{ required: true }]}><Input /></Form.Item>
+          <Form.Item name="email" label="邮箱" rules={[{ required: true, type: 'email' }]}><Input /></Form.Item>
+          <Form.Item name="password" label="初始密码" rules={[{ required: true, min: 6 }]}><Input.Password /></Form.Item>
+          <Form.Item name="roleId" label="角色">
+            <Select placeholder="选择角色" allowClear
+              options={roles.map((r: any) => ({ value: r.id, label: r.displayName }))} />
           </Form.Item>
         </Form>
       </Modal>
 
-      {/* Edit User Modal */}
-      <Modal
-        title="编辑用户"
-        open={!!editUser}
+      <Modal title="编辑用户" open={!!editUser}
         onCancel={() => setEditUser(null)}
-        onOk={() => editForm.submit()}
-        destroyOnHidden
-      >
+        onOk={() => editForm.submit()} destroyOnHidden>
         <Form form={editForm} layout="vertical" onFinish={handleEdit}>
-          <Form.Item name="email" label="邮箱" rules={[{ required: true, type: 'email' }]}>
-            <Input />
+          <Form.Item name="email" label="邮箱" rules={[{ required: true, type: 'email' }]}><Input /></Form.Item>
+          <Form.Item name="roleId" label="角色">
+            <Select placeholder="选择角色" allowClear
+              options={roles.map((r: any) => ({ value: r.id, label: r.displayName }))} />
           </Form.Item>
           <Form.Item name="isActive" label="状态">
             <Select options={[{ value: true, label: '启用' }, { value: false, label: '禁用' }]} />

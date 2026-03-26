@@ -4,6 +4,7 @@ import { Card, Descriptions, Tag } from 'antd';
 import { useRequest } from 'ahooks';
 import { useParams, useSearchParams } from 'next/navigation';
 import { useClusterStore } from '@/hooks/use-cluster';
+import { request } from '@/lib/request';
 
 export default function PodDetailPage() {
   const { name } = useParams<{ name: string }>();
@@ -14,7 +15,7 @@ export default function PodDetailPage() {
   const { data: pod, loading } = useRequest(
     async () => {
       if (!clusterId) return null;
-      const res = await fetch(
+      const res = await request(
         `/api/k8s/${clusterId}/namespaces/${namespace}/pods/${name}`,
       );
       if (!res.ok) return null;

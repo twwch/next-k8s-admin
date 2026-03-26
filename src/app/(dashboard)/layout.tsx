@@ -17,8 +17,9 @@ import zhCN from 'antd/locale/zh_CN';
 import ClusterSelector from '@/components/cluster-selector';
 import Logo from '@/components/logo';
 import { useRequest } from 'ahooks';
+import { request } from '@/lib/request';
 
-const menuData = [
+const baseMenu = [
   { path: '/', name: 'Dashboard', icon: <DashboardOutlined /> },
   {
     name: '集群资源',
@@ -63,17 +64,18 @@ const menuData = [
     ],
   },
   { path: '/apps/releases', name: '发布记录', icon: <FileTextOutlined /> },
-  {
-    name: '系统管理',
-    icon: <SettingOutlined />,
-    children: [
-      { path: '/admin/users', name: '用户管理', icon: <UserOutlined /> },
-      { path: '/admin/roles', name: '角色管理', icon: <SafetyOutlined /> },
-      { path: '/clusters', name: '集群管理', icon: <ClusterOutlined /> },
-      { path: '/admin/audit', name: '审计日志', icon: <AuditOutlined /> },
-    ],
-  },
 ];
+
+const adminMenu = {
+  name: '系统管理',
+  icon: <SettingOutlined />,
+  children: [
+    { path: '/admin/users', name: '用户管理', icon: <UserOutlined /> },
+    { path: '/admin/roles', name: '角色管理', icon: <SafetyOutlined /> },
+    { path: '/clusters', name: '集群管理', icon: <ClusterOutlined /> },
+    { path: '/admin/audit', name: '审计日志', icon: <AuditOutlined /> },
+  ],
+};
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -81,13 +83,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [collapsed, setCollapsed] = useState(false);
 
   const { data: user } = useRequest(async () => {
-    const res = await fetch('/api/auth/me');
+    const res = await request('/api/auth/me');
     if (!res.ok) return null;
     return res.json();
   });
 
   const handleLogout = async () => {
-    await fetch('/api/auth/logout', { method: 'POST' });
+    await request('/api/auth/logout', { method: 'POST' });
     router.push('/login');
   };
 
@@ -117,7 +119,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         collapsed={collapsed}
         onCollapse={setCollapsed}
         location={{ pathname }}
-        route={{ routes: menuData }}
+        route={{ routes: user?.isSuperAdmin ? [...baseMenu, adminMenu] : baseMenu }}
         token={{
           header: {
             colorBgHeader: '#fff',

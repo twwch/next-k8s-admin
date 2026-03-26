@@ -4,6 +4,7 @@ import { Table, Select, Tag } from 'antd';
 import { useRequest } from 'ahooks';
 import { useState } from 'react';
 import PageContainer from '@/components/page-container';
+import { request } from '@/lib/request';
 
 export default function AuditPage() {
   const [filters, setFilters] = useState<Record<string, string>>({});
@@ -12,7 +13,7 @@ export default function AuditPage() {
   const { data: logs = [], loading } = useRequest(
     async () => {
       const params = new URLSearchParams({ page: String(page), pageSize: '20', ...filters });
-      const res = await fetch(`/api/audit?${params}`);
+      const res = await request(`/api/audit?${params}`);
       return res.json();
     },
     { refreshDeps: [page, filters] },

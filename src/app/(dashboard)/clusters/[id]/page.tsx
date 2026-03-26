@@ -6,6 +6,7 @@ import { useRequest } from 'ahooks';
 import { useParams, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import PageContainer from '@/components/page-container';
+import { request } from '@/lib/request';
 
 const { TextArea } = Input;
 
@@ -23,7 +24,7 @@ export default function ClusterDetailPage() {
   const [notifyForm] = Form.useForm();
 
   const { data: cluster, loading, refresh } = useRequest(async () => {
-    const res = await fetch(`/api/clusters/${id}`);
+    const res = await request(`/api/clusters/${id}`);
     return res.json();
   });
 
@@ -44,7 +45,7 @@ export default function ClusterDetailPage() {
   const handleSaveBasic = async (values: any) => {
     setSaving(true);
     try {
-      const res = await fetch(`/api/clusters/${id}`, {
+      const res = await request(`/api/clusters/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -66,7 +67,7 @@ export default function ClusterDetailPage() {
   const handleSaveNotify = async (values: any) => {
     setSaving(true);
     try {
-      const res = await fetch(`/api/clusters/${id}`, {
+      const res = await request(`/api/clusters/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

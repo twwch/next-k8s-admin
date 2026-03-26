@@ -12,6 +12,7 @@ import { useClusterStore } from '@/hooks/use-cluster';
 import PageContainer from '@/components/page-container';
 import { gradientBtnStyle } from '@/lib/styles';
 import { isSystemResource } from '@/lib/k8s-helpers';
+import { request } from '@/lib/request';
 
 export default function IngressesPage() {
   const [namespace, setNamespace] = useState<string | undefined>();
@@ -24,7 +25,7 @@ export default function IngressesPage() {
     const name = record.metadata?.name;
     const ns = record.metadata?.namespace;
     if (!clusterId || !name || !ns) return;
-    const res = await fetch(`/api/k8s/${clusterId}/namespaces/${ns}/ingresses/${name}`, { method: 'DELETE' });
+    const res = await request(`/api/k8s/${clusterId}/namespaces/${ns}/ingresses/${name}`, { method: 'DELETE' });
     if (res.ok) { message.success(`Ingress ${name} 已删除`); refresh(); }
     else { const d = await res.json().catch(() => ({})); message.error(d.error || '删除失败'); }
   };
