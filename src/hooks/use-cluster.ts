@@ -6,7 +6,9 @@ import { persist } from 'zustand/middleware';
 interface ClusterState {
   clusterId: string | null;
   clusterName: string | null;
+  version: number;
   setCluster: (id: string, name: string) => void;
+  refreshClusterList: () => void;
 }
 
 export const useClusterStore = create<ClusterState>()(
@@ -14,7 +16,9 @@ export const useClusterStore = create<ClusterState>()(
     (set) => ({
       clusterId: null,
       clusterName: null,
+      version: 0,
       setCluster: (id, name) => set({ clusterId: id, clusterName: name }),
+      refreshClusterList: () => set((s) => ({ version: s.version + 1 })),
     }),
     { name: 'k8s-cluster' },
   ),

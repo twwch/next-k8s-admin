@@ -13,13 +13,13 @@ const statusColors: Record<string, string> = {
 };
 
 export default function ClusterSelector() {
-  const { clusterId, clusterName, setCluster } = useClusterStore();
+  const { clusterId, clusterName, setCluster, version } = useClusterStore();
 
   const { data: clusters = [] } = useRequest(async () => {
     const res = await request('/api/clusters');
     if (!res.ok) return [];
     return res.json();
-  });
+  }, { refreshDeps: [version] });
 
   const currentCluster = clusters.find((c: any) => c.id === clusterId);
   const statusColor = statusColors[currentCluster?.status] || statusColors.disconnected;

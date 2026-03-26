@@ -11,6 +11,7 @@ import { useRequest } from 'ahooks';
 import PageContainer from '@/components/page-container';
 import { gradientBtnStyle } from '@/lib/styles';
 import { request } from '@/lib/request';
+import { useClusterStore } from '@/hooks/use-cluster';
 
 const statusMap: Record<string, { color: string; label: string; icon: React.ReactNode }> = {
   connected: { color: 'success', label: '已连接', icon: <CheckCircleOutlined /> },
@@ -26,6 +27,7 @@ const authTypeMap: Record<string, string> = {
 export default function ClustersPage() {
   const { message } = App.useApp();
   const router = useRouter();
+  const refreshClusterList = useClusterStore((s) => s.refreshClusterList);
   const [testingId, setTestingId] = useState<string | null>(null);
 
   const { data: clusters = [], loading, refresh } = useRequest(async () => {
@@ -57,6 +59,7 @@ export default function ClustersPage() {
       return;
     }
     message.success('已删除');
+    refreshClusterList();
     refresh();
   };
 

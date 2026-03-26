@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { gradientBtnStyle } from '@/lib/styles';
 import { request } from '@/lib/request';
+import { useClusterStore } from '@/hooks/use-cluster';
 
 const { TextArea } = Input;
 const { Text } = Typography;
@@ -12,6 +13,7 @@ const { Text } = Typography;
 export default function NewClusterPage() {
   const { message } = App.useApp();
   const router = useRouter();
+  const refreshClusterList = useClusterStore((s) => s.refreshClusterList);
   const [loading, setLoading] = useState(false);
   const [authType, setAuthType] = useState('token');
   const [notifyEnabled, setNotifyEnabled] = useState(false);
@@ -26,6 +28,7 @@ export default function NewClusterPage() {
       });
       if (res.ok) {
         message.success('集群添加成功');
+        refreshClusterList();
         router.push('/clusters');
       } else {
         const data = await res.json();
