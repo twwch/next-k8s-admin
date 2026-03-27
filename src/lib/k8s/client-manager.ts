@@ -16,15 +16,25 @@ interface K8sClients {
   storage: k8s.StorageV1Api;
 }
 
-const clientCache = new Map<string, K8sClients>();
+interface CachedClient {
+  clients: K8sClients;
+  createdAt: number;
+  ttl: number; // milliseconds, 0 means no expiry
+}
+
+// EKS tokens expire in 60s, refresh at 50s to avoid edge cases
+const EKS_CACHE_TTL = 50 * 1000;
+
+const clientCache = new Map<string, CachedClient>();
 
 /**
  * Detect if kubeconfig uses EKS exec-based auth (aws eks get-token)
  * and replace it with a static bearer token generated via AWS SDK.
  */
-async function resolveEksAuth(kc: k8s.KubeConfig, kubeconfigYaml: string) {
+async function resolveEksAuth(kc: k8s.KubeConfig, kubeconfigYaml: string): Promise<boolean> {
   const parsed = yaml.parse(kubeconfigYaml);
-  if (!parsed?.users) return;
+  if (!parsed?.users) return false;
+  let resolved = false;
 
   for (let i = 0; i < parsed.users.length; i++) {
     const userEntry = parsed.users[i];
@@ -54,6 +64,7 @@ async function resolveEksAuth(kc: k8s.KubeConfig, kubeconfigYaml: string) {
             (kcUser as any).token = token;
             // Remove exec so it uses the token instead
             (kcUser as any).exec = undefined;
+            resolved = true;
           }
         } catch (err: any) {
           throw new Error(`Failed to generate EKS token for cluster "${clusterName}": ${err.message}`);
@@ -76,6 +87,7 @@ async function resolveEksAuth(kc: k8s.KubeConfig, kubeconfigYaml: string) {
       }
     }
   }
+  return resolved;
 }
 
 /**
@@ -87,16 +99,17 @@ async function generateEksToken(clusterName: string, region: string): Promise<st
   return token;
 }
 
-async function buildKubeConfig(clusterId: string): Promise<k8s.KubeConfig> {
+async function buildKubeConfig(clusterId: string): Promise<{ kc: k8s.KubeConfig; isEks: boolean }> {
   const [cluster] = await db.select().from(clusters).where(eq(clusters.id, clusterId)).limit(1);
   if (!cluster) throw new Error(`Cluster ${clusterId} not found`);
 
   const kc = new k8s.KubeConfig();
+  let isEks = false;
 
   if (cluster.authType === 'kubeconfig' && cluster.kubeconfig) {
     const kubeconfigStr = decrypt(cluster.kubeconfig);
     kc.loadFromString(kubeconfigStr);
-    await resolveEksAuth(kc, kubeconfigStr);
+    isEks = await resolveEksAuth(kc, kubeconfigStr);
   } else if (cluster.authType === 'token' && cluster.saToken) {
     const clusterConfig = {
       name: cluster.name,
@@ -113,14 +126,18 @@ async function buildKubeConfig(clusterId: string): Promise<k8s.KubeConfig> {
     throw new Error(`Invalid auth configuration for cluster ${cluster.name}`);
   }
 
-  return kc;
+  return { kc, isEks };
 }
 
 export async function getK8sClient(clusterId: string): Promise<K8sClients> {
   const cached = clientCache.get(clusterId);
-  if (cached) return cached;
+  if (cached) {
+    const isExpired = cached.ttl > 0 && (Date.now() - cached.createdAt) >= cached.ttl;
+    if (!isExpired) return cached.clients;
+    clientCache.delete(clusterId);
+  }
 
-  const kc = await buildKubeConfig(clusterId);
+  const { kc, isEks } = await buildKubeConfig(clusterId);
   const clients: K8sClients = {
     kc,
     core: kc.makeApiClient(k8s.CoreV1Api),
@@ -130,7 +147,11 @@ export async function getK8sClient(clusterId: string): Promise<K8sClients> {
     storage: kc.makeApiClient(k8s.StorageV1Api),
   };
 
-  clientCache.set(clusterId, clients);
+  clientCache.set(clusterId, {
+    clients,
+    createdAt: Date.now(),
+    ttl: isEks ? EKS_CACHE_TTL : 0,
+  });
   return clients;
 }
 
