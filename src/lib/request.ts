@@ -6,7 +6,7 @@ export async function request(url: string, options?: RequestInit): Promise<Respo
   const res = await fetch(url, { ...options, credentials: 'include' });
 
   if (!res.ok) {
-    // 401 跳登录页
+    // 401 跳登录页, 403 不跳（禁用用户由页面处理）
     if (res.status === 401) {
       if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
         window.location.href = '/login';

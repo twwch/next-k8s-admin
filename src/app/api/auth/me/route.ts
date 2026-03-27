@@ -1,12 +1,17 @@
 import { NextResponse } from 'next/server';
-import { validateSession } from '@/lib/auth/session';
+import { validateSession, isSessionUserDisabled } from '@/lib/auth/session';
 import { db } from '@/lib/db';
 import { userRoleBindings, roles } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 
 export async function GET() {
   const auth = await validateSession();
-  if (!auth) { return NextResponse.json({ error: '未登录' }, { status: 401 }); }
+  if (!auth) {
+    if (await isSessionUserDisabled()) {
+      return NextResponse.json({ error: '账号已被禁用' }, { status: 403 });
+    }
+    return NextResponse.json({ error: '未登录' }, { status: 401 });
+  }
 
   // Check if user has super-admin role
   const bindings = await db

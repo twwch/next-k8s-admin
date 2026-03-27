@@ -34,3 +34,14 @@ export async function validateSession() {
   if (!user || !user.isActive) return null;
   return { session: { token }, user };
 }
+
+/** Check if the token belongs to a disabled user (for 403 distinction) */
+export async function isSessionUserDisabled() {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(SESSION_COOKIE)?.value;
+  if (!token) return false;
+  const payload = verifyJwt(token);
+  if (!payload) return false;
+  const [user] = await db.select().from(users).where(eq(users.id, payload.userId)).limit(1);
+  return user ? !user.isActive : false;
+}

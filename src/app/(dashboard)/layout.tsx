@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import dynamic from 'next/dynamic';
-import { ConfigProvider, Dropdown, Avatar, App } from 'antd';
+import { ConfigProvider, Dropdown, Avatar, App, Result, Button } from 'antd';
 
 const ProLayout = dynamic(() => import('@ant-design/pro-layout').then(m => m.ProLayout), { ssr: false });
 import {
@@ -82,8 +82,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
 
+  const [disabled, setDisabled] = useState(false);
+
   const { data: user } = useRequest(async () => {
     const res = await request('/api/auth/me');
+    if (res.status === 403) { setDisabled(true); return null; }
     if (!res.ok) return null;
     return res.json();
   });
@@ -92,6 +95,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     await request('/api/auth/logout', { method: 'POST' });
     router.push('/login');
   };
+
+  if (disabled) {
+    return (
+      <ConfigProvider locale={zhCN} theme={{ token: { colorPrimary: '#326CE5' } }}>
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', background: '#f5f7fa' }}>
+          <Result
+            status="403"
+            title="403"
+            subTitle="您的账号已被禁用，请联系管理员"
+            extra={<Button type="primary" onClick={handleLogout}>返回登录</Button>}
+          />
+        </div>
+      </ConfigProvider>
+    );
+  }
 
   return (
     <ConfigProvider
