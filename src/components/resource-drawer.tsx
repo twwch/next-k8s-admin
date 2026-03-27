@@ -254,7 +254,7 @@ export default function ResourceDrawer({
             }}>
               当前版本（只读）
             </div>
-            <div style={{ flex: 1, overflow: 'auto' }}>
+            <div style={{ flex: 1, overflow: 'auto', background: '#0d1117' }}>
               <YamlEditor value={originalYaml} readOnly height="100%" />
             </div>
           </div>
@@ -274,7 +274,7 @@ export default function ResourceDrawer({
               <span>编辑中</span>
               {hasChanges && <span style={{ color: '#3fb950', fontSize: 10 }}>有变更</span>}
             </div>
-            <div style={{ flex: 1, overflow: 'auto' }}>
+            <div style={{ flex: 1, overflow: 'auto', background: '#0d1117' }}>
               <YamlEditor value={yamlText} onChange={setYamlText} diffBase={originalYaml} height="100%" />
             </div>
           </div>

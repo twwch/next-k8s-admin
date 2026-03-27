@@ -42,10 +42,10 @@ function computeDiff(baseText: string, currentText: string): ('added' | 'modifie
 }
 
 const FONT = "Menlo, Monaco, Consolas, 'Courier New', monospace";
-const LINE_HEIGHT = 1.6;
 const FONT_SIZE = 13;
+const LINE_PX = 21;
+const LINE_HEIGHT = `${LINE_PX}px`;
 const PADDING = 14;
-const LINE_PX = FONT_SIZE * LINE_HEIGHT;
 
 export default function YamlEditor({ value = '', onChange, height = 400, readOnly = false, placeholder, diffBase }: Props) {
   const highlight = useCallback((code: string) => highlightYaml(code), []);
