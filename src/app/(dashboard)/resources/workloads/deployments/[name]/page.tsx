@@ -284,7 +284,7 @@ export default function DeploymentDetailPage() {
               <Button icon={<RollbackOutlined />} loading={rollingBack}>回滚</Button>
             </Popconfirm>
           )}
-          <Button onClick={fetchDeployment}>刷新</Button>
+          <Button onClick={() => fetchDeployment()}>刷新</Button>
         </Space>
       </div>
 
