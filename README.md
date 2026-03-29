@@ -230,6 +230,10 @@ GitHub Actions 工作流（`.github/workflows/docker-publish.yml`）：
 - 推送到 `main` 分支 → 构建并推送 `twwch/k8s-admin:latest`
 - 推送 `v*` 标签 → 构建版本镜像并创建 GitHub Release
 
+## 社区支持
+
+- [LINUX DO](https://linux.do/)
+
 ## License
 
 [Apache License 2.0](LICENSE)
