@@ -1,89 +1,235 @@
 # K8s Admin
 
-Multi-cluster Kubernetes management platform with RBAC, application deployment, and real-time monitoring.
+多集群 Kubernetes 管理平台，支持 RBAC 权限控制、资源管理、应用发布、实时终端、审计日志等功能。
 
-## Features
+![Dashboard](images/dashborad.png)
 
-- **Multi-Cluster Management** - Connect and manage multiple Kubernetes clusters via Token or Kubeconfig
-- **RBAC** - Role-based access control with cluster and namespace level permissions
-- **Resource Management** - View and edit Deployments, StatefulSets, DaemonSets, Services, Ingresses, ConfigMaps, Secrets, PVCs, etc.
-- **Application Deployment** - Template-based app deployment with revision tracking and rollback
-- **Real-time Terminal** - WebSocket-based Pod exec terminal
-- **Dashboard** - Cluster status, Pod/Deployment counts, recent events, filtered by user permissions
-- **Audit Logging** - Track all user operations
-- **Notifications** - Feishu webhook notifications on deploy/rollback
+## 功能特性
 
-## Tech Stack
+- **多集群管理** - 通过 Token、Kubeconfig 或 EKS Token 连接和管理多个 Kubernetes 集群
+- **RBAC 权限控制** - 基于角色的访问控制，支持集群级别和命名空间级别的细粒度权限
+- **资源管理** - 管理 Deployments、StatefulSets、DaemonSets、Jobs、Pods、Services、Ingresses、ConfigMaps、Secrets、PVCs 等全部常用资源
+- **应用发布** - 基于模板的应用部署，支持版本追踪和回滚
+- **实时终端** - 基于 WebSocket 的 Pod 终端，支持交互式 Shell
+- **实时日志** - Pod 日志实时流式查看
+- **Dashboard** - 集群状态总览、Pod/Deployment 统计、最近事件，按用户权限过滤
+- **审计日志** - 全面记录用户操作
+- **飞书通知** - 部署/回滚时通过飞书 Webhook 发送通知
 
-- **Frontend**: Next.js 16, React 19, Ant Design 5, Zustand
-- **Backend**: Next.js API Routes, Custom Server (WebSocket), Drizzle ORM
-- **Database**: PostgreSQL
-- **Auth**: JWT
-- **K8s**: @kubernetes/client-node
+## 技术栈
 
-## Quick Start
+| 类别 | 技术 |
+|------|------|
+| 前端 | Next.js 16、React 19、Ant Design 5、Zustand、Tailwind CSS 4、xterm.js |
+| 后端 | Next.js API Routes、自定义 Server（WebSocket）、Drizzle ORM |
+| 数据库 | PostgreSQL |
+| 认证 | JWT、邮箱验证码 |
+| K8s | @kubernetes/client-node、AWS SDK（EKS Token） |
 
-### Prerequisites
+## 截图
+
+### 登录
+
+![登录页面](images/登录页面.png)
+
+### 集群管理
+
+<table>
+  <tr>
+    <td><img src="images/集群管理.png" alt="集群管理" /></td>
+    <td><img src="images/添加集群.png" alt="添加集群" /></td>
+  </tr>
+  <tr>
+    <td align="center">集群列表</td>
+    <td align="center">添加集群</td>
+  </tr>
+</table>
+
+### 工作负载
+
+<table>
+  <tr>
+    <td><img src="images/deployments.png" alt="Deployments" /></td>
+    <td><img src="images/deploy-detail.png" alt="Deployment 详情" /></td>
+  </tr>
+  <tr>
+    <td align="center">Deployments</td>
+    <td align="center">Deployment 详情</td>
+  </tr>
+  <tr>
+    <td><img src="images/statefulsets.png" alt="StatefulSets" /></td>
+    <td><img src="images/daemonsets.png" alt="DaemonSets" /></td>
+  </tr>
+  <tr>
+    <td align="center">StatefulSets</td>
+    <td align="center">DaemonSets</td>
+  </tr>
+  <tr>
+    <td><img src="images/pods.png" alt="Pods" /></td>
+    <td></td>
+  </tr>
+  <tr>
+    <td align="center">Pods</td>
+    <td></td>
+  </tr>
+</table>
+
+### 网络
+
+<table>
+  <tr>
+    <td><img src="images/services.png" alt="Services" /></td>
+    <td><img src="images/ingresses.png" alt="Ingresses" /></td>
+  </tr>
+  <tr>
+    <td align="center">Services</td>
+    <td align="center">Ingresses</td>
+  </tr>
+</table>
+
+### 配置与存储
+
+<table>
+  <tr>
+    <td><img src="images/configmaps.png" alt="ConfigMaps" /></td>
+    <td><img src="images/pvcs.png" alt="PVCs" /></td>
+  </tr>
+  <tr>
+    <td align="center">ConfigMaps</td>
+    <td align="center">PersistentVolumeClaims</td>
+  </tr>
+  <tr>
+    <td><img src="images/storageclasses.png" alt="StorageClasses" /></td>
+    <td><img src="images/namespaces.png" alt="Namespaces" /></td>
+  </tr>
+  <tr>
+    <td align="center">StorageClasses</td>
+    <td align="center">Namespaces</td>
+  </tr>
+</table>
+
+### 终端与日志
+
+<table>
+  <tr>
+    <td><img src="images/终端链接.png" alt="终端连接" /></td>
+    <td><img src="images/终端实时日志.png" alt="实时日志" /></td>
+  </tr>
+  <tr>
+    <td align="center">Pod 终端</td>
+    <td align="center">实时日志</td>
+  </tr>
+</table>
+
+### 资源编辑
+
+![资源编辑](images/资源编辑.png)
+
+### 应用发布
+
+<table>
+  <tr>
+    <td><img src="images/发布记录.png" alt="发布记录" /></td>
+    <td><img src="images/飞书通知卡片.png" alt="飞书通知卡片" /></td>
+  </tr>
+  <tr>
+    <td align="center">发布记录</td>
+    <td align="center">飞书通知卡片</td>
+  </tr>
+</table>
+
+### 用户与权限管理
+
+<table>
+  <tr>
+    <td><img src="images/用户管理.png" alt="用户管理" /></td>
+    <td><img src="images/创建用户.png" alt="创建用户" /></td>
+  </tr>
+  <tr>
+    <td align="center">用户管理</td>
+    <td align="center">创建用户</td>
+  </tr>
+  <tr>
+    <td><img src="images/角色管理.png" alt="角色管理" /></td>
+    <td><img src="images/角色创建.png" alt="角色创建" /></td>
+  </tr>
+  <tr>
+    <td align="center">角色管理</td>
+    <td align="center">角色创建</td>
+  </tr>
+</table>
+
+### 审计日志
+
+![审计日志](images/审计日志.png)
+
+## 快速开始
+
+### 环境要求
 
 - Node.js 20+
 - PostgreSQL
 
-### Development
+### 本地开发
 
 ```bash
-# Install dependencies
+# 安装依赖
 npm install
 
-# Configure environment
+# 配置环境变量
 cp .env.example .env
-# Edit .env with your DATABASE_URL and other settings
+# 编辑 .env，设置 DATABASE_URL 和 ENCRYPTION_KEY
 
-# Start dev server
+# 启动开发服务器
 npm run dev
 ```
 
-Open http://localhost:3000. On first startup, the database is auto-created, migrated, and seeded with an admin account (check console output for credentials).
+打开 http://localhost:3000。首次启动时，系统会自动创建数据库、运行迁移并生成管理员账号（密码在控制台输出中查看）。
 
-### Docker
+### Docker 部署
 
 ```bash
-# Build
+# 构建镜像
 docker build -t twwch/k8s-admin .
 
-# Run
+# 使用 docker-compose 启动（含 PostgreSQL）
+docker compose up -d
+
+# 或使用脚本启动
 ./docker_run.sh
 ```
 
-The `docker_run.sh` script mounts `~/.aws` (read-only) and `.env` into the container.
+`docker_run.sh` 会挂载 `~/.aws`（只读）和 `.env` 到容器中。
 
-### Environment Variables
+### 环境变量
 
-| Variable | Description | Default |
-|---|---|---|
-| `DATABASE_URL` | PostgreSQL connection string | required |
-| `ENCRYPTION_KEY` | 32-byte hex key for encrypting cluster credentials | required |
-| `SESSION_EXPIRY_HOURS` | JWT session expiry | `24` |
-| `SMTP_HOST` | SMTP server for email verification | - |
-| `SMTP_PORT` | SMTP port | `587` |
-| `SMTP_USER` | SMTP username | - |
-| `SMTP_PASS` | SMTP password | - |
-| `SMTP_FROM` | Sender email address | `noreply@k8sadmin.local` |
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `DATABASE_URL` | PostgreSQL 连接字符串 | 必填 |
+| `ENCRYPTION_KEY` | 32 字节 hex 密钥，用于加密集群凭据 | 必填 |
+| `SESSION_EXPIRY_HOURS` | JWT 会话过期时间（小时） | `24` |
+| `SMTP_HOST` | SMTP 服务器（用于邮箱验证码登录） | - |
+| `SMTP_PORT` | SMTP 端口 | `587` |
+| `SMTP_USER` | SMTP 用户名 | - |
+| `SMTP_PASS` | SMTP 密码 | - |
+| `SMTP_FROM` | 发件人邮箱 | `noreply@k8sadmin.local` |
+| `NEXT_PUBLIC_WS_URL` | WebSocket 地址 | `ws://localhost:3000/ws` |
 
-## Auto-Initialization
+## 自动初始化
 
-On startup, the server automatically:
+服务启动时会自动执行：
 
-1. **Creates the database** if it doesn't exist
-2. **Runs migrations** from `drizzle/` (skips if tables already exist)
-3. **Seeds initial data** - built-in roles (super-admin, cluster-admin, developer, viewer) and an admin user with a random password printed to console
+1. **创建数据库** - 如果数据库不存在则自动创建
+2. **运行迁移** - 执行 `drizzle/` 下的迁移文件（已有表则跳过）
+3. **初始化数据** - 创建内置角色（super-admin、cluster-admin、developer、viewer）和管理员用户（随机密码输出到控制台）
 
 ## CI/CD
 
-GitHub Actions workflow (`.github/workflows/docker-publish.yml`):
+GitHub Actions 工作流（`.github/workflows/docker-publish.yml`）：
 
-- Push to `main` - builds and pushes `twwch/k8s-admin:latest`
-- Push `v*` tag - builds versioned image and creates GitHub Release
+- 推送到 `main` 分支 → 构建并推送 `twwch/k8s-admin:latest`
+- 推送 `v*` 标签 → 构建版本镜像并创建 GitHub Release
 
 ## License
 
-Licensed under the [Apache License 2.0](LICENSE).
+[Apache License 2.0](LICENSE)

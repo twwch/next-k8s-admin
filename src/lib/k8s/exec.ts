@@ -4,7 +4,7 @@
  */
 import WebSocket from 'ws';
 import * as k8s from '@kubernetes/client-node';
-import { getK8sClient } from './client-manager';
+import { getK8sClient, invalidateClient } from './client-manager';
 
 interface ExecOptions {
   clusterId: string;
@@ -25,11 +25,12 @@ interface ExecConnection {
 }
 
 export async function connectExec(opts: ExecOptions): Promise<ExecConnection> {
+  // Force refresh client to get a fresh EKS token
+  invalidateClient(opts.clusterId);
   const clients = await getK8sClient(opts.clusterId);
   const kc = clients.kc;
 
   const cluster = kc.getCurrentCluster();
-  const user = kc.getCurrentUser();
   if (!cluster) throw new Error('No cluster configured');
 
   // Build exec URL
@@ -47,32 +48,52 @@ export async function connectExec(opts: ExecOptions): Promise<ExecConnection> {
   const execUrl = `${serverUrl}/api/v1/namespaces/${opts.namespace}/pods/${opts.podName}/exec?${params.toString()}`;
   const wsUrl = execUrl.replace(/^http/, 'ws');
 
-  // Build WebSocket options with auth
+  // Use applyToFetchOptions to get proper auth headers (handles EKS tokens, client certs, etc.)
+  const fetchOpts = await kc.applyToFetchOptions({} as any);
+  const fetchHeaders = fetchOpts.headers as Record<string, string> | undefined;
+
+  // Also get TLS options
+  const tlsOpts: any = {};
+  await kc.applyToHTTPSOptions(tlsOpts);
+
+  const wsHeaders: Record<string, string> = {};
+
+  // Extract auth from fetch options (this properly handles all auth types)
+  if (fetchHeaders) {
+    if (fetchHeaders.Authorization || fetchHeaders.authorization) {
+      wsHeaders['Authorization'] = fetchHeaders.Authorization || fetchHeaders.authorization;
+    }
+    // Handle Headers object
+    if (typeof (fetchHeaders as any).get === 'function') {
+      const authHeader = (fetchHeaders as any).get('Authorization') || (fetchHeaders as any).get('authorization');
+      if (authHeader) wsHeaders['Authorization'] = authHeader;
+    }
+  }
+
+  // Fallback: check user token directly
+  if (!wsHeaders['Authorization']) {
+    const user = kc.getCurrentUser();
+    if (user && (user as any).token) {
+      wsHeaders['Authorization'] = `Bearer ${(user as any).token}`;
+    }
+  }
+
   const wsOpts: WebSocket.ClientOptions = {
-    headers: {},
+    headers: wsHeaders,
     rejectUnauthorized: false,
   };
 
-  // Apply auth from kubeconfig
-  const reqOpts: any = {};
-  await kc.applyToHTTPSOptions(reqOpts);
-
-  if (reqOpts.headers?.Authorization) {
-    (wsOpts.headers as Record<string, string>)['Authorization'] = reqOpts.headers.Authorization;
-  }
-  if (user && (user as any).token) {
-    (wsOpts.headers as Record<string, string>)['Authorization'] = `Bearer ${(user as any).token}`;
-  }
-  if (reqOpts.cert) wsOpts.cert = reqOpts.cert;
-  if (reqOpts.key) wsOpts.key = reqOpts.key;
-  if (reqOpts.ca) {
-    wsOpts.ca = reqOpts.ca;
+  if (tlsOpts.cert) wsOpts.cert = tlsOpts.cert;
+  if (tlsOpts.key) wsOpts.key = tlsOpts.key;
+  if (tlsOpts.ca) {
+    wsOpts.ca = tlsOpts.ca;
     wsOpts.rejectUnauthorized = true;
   }
 
   console.log('[exec] Connecting to:', wsUrl.substring(0, 80) + '...');
-  console.log('[exec] Auth header:', !!(wsOpts.headers as any)?.Authorization);
-  console.log('[exec] Client cert:', !!wsOpts.cert);
+  console.log('[exec] Auth header:', !!wsHeaders['Authorization']);
+  console.log('[exec] Auth header preview:', wsHeaders['Authorization']?.substring(0, 30) + '...');
+  console.log('[exec] CA cert:', !!wsOpts.ca);
 
   // Connect with v4 channel protocol
   const k8sWs = new WebSocket(wsUrl, ['v4.channel.k8s.io'], wsOpts);

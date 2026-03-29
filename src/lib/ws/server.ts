@@ -17,6 +17,7 @@ const WATCH_API_GROUPS: Record<string, string> = {
   configmaps: '/api/v1',
   secrets: '/api/v1',
   persistentvolumeclaims: '/api/v1',
+  persistentvolumes: '/api/v1',
   namespaces: '/api/v1',
   nodes: '/api/v1',
   events: '/api/v1',
@@ -30,7 +31,7 @@ const WATCH_API_GROUPS: Record<string, string> = {
   storageclasses: '/apis/storage.k8s.io/v1',
 };
 
-const CLUSTER_SCOPED = new Set(['namespaces', 'nodes', 'storageclasses']);
+const CLUSTER_SCOPED = new Set(['namespaces', 'nodes', 'storageclasses', 'persistentvolumes']);
 
 function getWatchPath(kind: string, namespace?: string): string {
   const apiGroup = WATCH_API_GROUPS[kind] || '/api/v1';

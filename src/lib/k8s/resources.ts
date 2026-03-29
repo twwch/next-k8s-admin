@@ -3,7 +3,7 @@ import { getK8sClient } from './client-manager';
 export type ResourceKind =
   | 'namespaces' | 'pods' | 'deployments' | 'replicasets' | 'statefulsets' | 'daemonsets'
   | 'jobs' | 'cronjobs' | 'services' | 'ingresses'
-  | 'configmaps' | 'secrets' | 'persistentvolumeclaims' | 'storageclasses'
+  | 'configmaps' | 'secrets' | 'persistentvolumeclaims' | 'persistentvolumes' | 'storageclasses'
   | 'nodes' | 'events';
 
 export async function listResources(clusterId: string, kind: ResourceKind, namespace?: string) {
@@ -62,6 +62,8 @@ export async function listResources(clusterId: string, kind: ResourceKind, names
       return namespace
         ? (await clients.core.listNamespacedPersistentVolumeClaim({ namespace })).items
         : (await clients.core.listPersistentVolumeClaimForAllNamespaces()).items;
+    case 'persistentvolumes':
+      return (await clients.core.listPersistentVolume()).items;
     case 'storageclasses':
       return (await clients.storage.listStorageClass()).items;
     case 'events':
@@ -157,6 +159,8 @@ export async function deleteResource(clusterId: string, kind: ResourceKind, name
     case 'statefulsets': return clients.apps.deleteNamespacedStatefulSet({ name, namespace: namespace! });
     case 'daemonsets': return clients.apps.deleteNamespacedDaemonSet({ name, namespace: namespace! });
     case 'jobs': return clients.batch.deleteNamespacedJob({ name, namespace: namespace! });
+    case 'persistentvolumeclaims': return clients.core.deleteNamespacedPersistentVolumeClaim({ name, namespace: namespace! });
+    case 'persistentvolumes': return clients.core.deletePersistentVolume({ name });
     default: throw new Error(`DELETE not supported for ${kind}`);
   }
 }

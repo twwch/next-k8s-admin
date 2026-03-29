@@ -1,12 +1,13 @@
 import nodemailer from 'nodemailer';
 import { db } from '@/lib/db';
 import { emailVerifications } from '@/lib/db/schema';
-import { and, eq, gt } from 'drizzle-orm';
+import { and, eq, gt, desc } from 'drizzle-orm';
 
+const smtpPort = parseInt(process.env.SMTP_PORT || '587');
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
-  port: parseInt(process.env.SMTP_PORT || '587'),
-  secure: false,
+  port: smtpPort,
+  secure: smtpPort === 465,
   auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
 });
 
@@ -15,6 +16,10 @@ function generateCode(): string {
 }
 
 export async function sendVerificationCode(email: string, purpose: 'login' | 'reset') {
+  // Invalidate previous unused codes for this email
+  await db.update(emailVerifications)
+    .set({ used: true })
+    .where(and(eq(emailVerifications.email, email), eq(emailVerifications.purpose, purpose), eq(emailVerifications.used, false)));
   const code = generateCode();
   const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
   await db.insert(emailVerifications).values({ email, code, purpose, expiresAt });
@@ -34,7 +39,7 @@ export async function verifyCode(email: string, code: string, purpose: 'login' |
       eq(emailVerifications.used, false),
       gt(emailVerifications.expiresAt, new Date()),
     ))
-    .orderBy(emailVerifications.createdAt)
+    .orderBy(desc(emailVerifications.createdAt))
     .limit(1);
   if (records.length === 0) return false;
   const record = records[0];
