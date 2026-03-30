@@ -4,7 +4,7 @@ import { useState } from 'react';
 import {
   Table, Button, Tag, Space, Popconfirm, Modal, Form, Input, Select, App,
 } from 'antd';
-import { PlusOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons';
+import { PlusOutlined, DeleteOutlined, EditOutlined, KeyOutlined } from '@ant-design/icons';
 import { useRequest } from 'ahooks';
 import PageContainer from '@/components/page-container';
 import { gradientBtnStyle } from '@/lib/styles';
@@ -14,8 +14,10 @@ export default function UsersPage() {
   const { message } = App.useApp();
   const [addOpen, setAddOpen] = useState(false);
   const [editUser, setEditUser] = useState<any>(null);
+  const [resetPwdUser, setResetPwdUser] = useState<any>(null);
   const [addForm] = Form.useForm();
   const [editForm] = Form.useForm();
+  const [resetPwdForm] = Form.useForm();
 
   const { data: users = [], loading, refresh } = useRequest(async () => {
     const res = await request('/api/admin/users');
@@ -65,12 +67,28 @@ export default function UsersPage() {
   const handleDelete = async (id: string) => {
     const res = await request(`/api/admin/users/${id}`, { method: 'DELETE' });
     if (!res.ok) {
-      const data = await res.json();
-      message.error(data.error || '删除失败');
+      const data = await res.json().catch(() => null);
+      message.error(data?.error || '删除失败');
       return;
     }
     message.success('已删除');
     refresh();
+  };
+
+  const handleResetPassword = async (values: { newPassword: string }) => {
+    const res = await request(`/api/admin/users/${resetPwdUser.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'reset-password', newPassword: values.newPassword }),
+    });
+    if (res.ok) {
+      message.success('密码已重置，用户下次登录需修改密码');
+      setResetPwdUser(null);
+      resetPwdForm.resetFields();
+    } else {
+      const data = await res.json().catch(() => null);
+      message.error(data?.error || '重置失败');
+    }
   };
 
   const columns = [
@@ -110,6 +128,11 @@ export default function UsersPage() {
               });
             }}
           >编辑</Button>
+          {record.username !== 'admin' && (
+            <Button size="small" icon={<KeyOutlined />}
+              onClick={() => { setResetPwdUser(record); resetPwdForm.resetFields(); }}
+            >重置密码</Button>
+          )}
           {record.username !== 'admin' && (
             <Popconfirm title="确认删除此用户?" onConfirm={() => handleDelete(record.id)}>
               <Button size="small" danger icon={<DeleteOutlined />}>删除</Button>
@@ -160,6 +183,24 @@ export default function UsersPage() {
           <Form.Item name="isActive" label="状态">
             <Select options={[{ value: true, label: '启用' }, { value: false, label: '禁用' }]} />
           </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal title={`重置密码 - ${resetPwdUser?.username}`} open={!!resetPwdUser}
+        onCancel={() => { setResetPwdUser(null); resetPwdForm.resetFields(); }}
+        onOk={() => resetPwdForm.submit()} destroyOnHidden>
+        <Form form={resetPwdForm} layout="vertical" onFinish={handleResetPassword}>
+          <Form.Item name="newPassword" label="新密码" rules={[{ required: true, min: 8, message: '密码至少 8 位' }]}>
+            <Input.Password placeholder="请输入新密码" />
+          </Form.Item>
+          <Form.Item name="confirmPassword" label="确认密码" dependencies={['newPassword']}
+            rules={[
+              { required: true, message: '请确认密码' },
+              ({ getFieldValue }) => ({ validator(_, value) { return !value || getFieldValue('newPassword') === value ? Promise.resolve() : Promise.reject(new Error('两次密码不一致')); } }),
+            ]}>
+            <Input.Password placeholder="请再次输入新密码" />
+          </Form.Item>
+          <div style={{ color: '#94a3b8', fontSize: 12 }}>重置后用户下次登录将被要求修改密码</div>
         </Form>
       </Modal>
     </>

@@ -1,18 +1,21 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Form, Input, Button, Tabs, App } from 'antd';
 import { UserOutlined, LockOutlined, MailOutlined } from '@ant-design/icons';
 import { useRouter } from 'next/navigation';
 import AuthBrand from '@/components/auth-brand';
 import { gradientBtnStyle } from '@/lib/styles';
 
-const smtpEnabled = process.env.NEXT_PUBLIC_SMTP_ENABLED === 'true';
-
 export default function LoginPage() {
   const router = useRouter();
   const { message } = App.useApp();
   const [loading, setLoading] = useState(false);
   const [countdown, setCountdown] = useState(0);
+  const [smtpEnabled, setSmtpEnabled] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/auth/smtp-status').then(r => r.json()).then(d => setSmtpEnabled(d.enabled)).catch(() => {});
+  }, []);
 
   const handlePasswordLogin = async (values: { username: string; password: string }) => {
     setLoading(true);
