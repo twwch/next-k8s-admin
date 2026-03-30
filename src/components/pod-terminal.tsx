@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Modal, Select, Space, Alert, Tag } from 'antd';
 import { request } from '@/lib/request';
+import { getWsUrl } from '@/lib/ws/url';
 
 interface Props {
   open: boolean;
@@ -129,7 +130,7 @@ export default function PodTerminal({ open, onClose, clusterId, namespace, podNa
 
     if (currentInitId !== initIdRef.current) return;
 
-    const wsUrl = process.env.NEXT_PUBLIC_WS_URL;
+    const wsUrl = getWsUrl();
     if (!wsUrl) {
       setError('WebSocket 服务未配置，请重启 Next.js 服务');
       return;

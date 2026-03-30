@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useCallback } from 'react';
 import { request } from '@/lib/request';
+import { getWsUrl } from '@/lib/ws/url';
 
 /**
  * Subscribe to K8s resource changes via WebSocket Watch API.
@@ -38,7 +39,7 @@ export function useResourceWatch(
         const { wsToken } = await tokenRes.json();
         if (!wsToken || cancelled) return;
 
-        const wsUrl = process.env.NEXT_PUBLIC_WS_URL;
+        const wsUrl = getWsUrl();
         if (!wsUrl || cancelled) return;
 
         const ws = new WebSocket(`${wsUrl}?token=${wsToken}`);

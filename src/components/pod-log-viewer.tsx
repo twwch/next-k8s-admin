@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { Modal, Select, Space, Button, Tag, Switch } from 'antd';
 import { ReloadOutlined, PauseCircleOutlined, PlayCircleOutlined } from '@ant-design/icons';
 import { request } from '@/lib/request';
+import { getWsUrl } from '@/lib/ws/url';
 
 interface Props {
   open: boolean;
@@ -69,7 +70,7 @@ export default function PodLogViewer({ open, onClose, clusterId, namespace, podN
       return;
     }
 
-    const wsUrl = process.env.NEXT_PUBLIC_WS_URL;
+    const wsUrl = getWsUrl();
     if (!wsUrl) return;
 
     try {
