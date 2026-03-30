@@ -124,6 +124,10 @@ async function handleExec(ws: AuthenticatedSocket, msg: any) {
 
 async function handleMessage(ws: AuthenticatedSocket, msg: any) {
   const { type, clusterId, namespace, podName, container, resourceType } = msg;
+
+  // exec-input / exec-resize are handled by the exec session handler, skip here
+  if (type === 'exec-input' || type === 'exec-resize') return;
+
   console.log('[ws] handleMessage:', type);
 
   const resource = type === 'subscribe-logs' ? 'pods' : type === 'subscribe-exec' ? 'pods' : type === 'subscribe-events' ? 'events' : type === 'subscribe-watch' ? (msg.kind || 'pods') : resourceType || 'pods';

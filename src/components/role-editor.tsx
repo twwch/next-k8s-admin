@@ -9,7 +9,13 @@ import { gradientBtnStyle } from '@/lib/styles';
 import { request } from '@/lib/request';
 
 const RESOURCES = ['deployments', 'statefulsets', 'daemonsets', 'jobs', 'pods', 'services', 'ingresses', 'configmaps', 'secrets', 'persistentvolumeclaims', 'storageclasses', 'namespaces', 'nodes'];
-const ACTIONS = ['get', 'list', 'create', 'update', 'delete'];
+const BASE_ACTIONS = ['get', 'list', 'create', 'update', 'delete'];
+const EXTRA_ACTIONS: Record<string, string[]> = { pods: ['exec', 'logs'] };
+const ALL_ACTIONS = [...BASE_ACTIONS, 'exec', 'logs'];
+
+function getActionsForResource(resource: string): string[] {
+  return [...BASE_ACTIONS, ...(EXTRA_ACTIONS[resource] || [])];
+}
 
 interface ClusterBinding {
   clusterId: string;
@@ -81,9 +87,10 @@ export default function RoleEditor({ roleId }: RoleEditorProps) {
   };
 
   const toggleAllForResource = (resource: string) => {
+    const available = getActionsForResource(resource);
     setPermissions(prev => {
       const current = prev[resource] || [];
-      return { ...prev, [resource]: current.length === ACTIONS.length ? [] : [...ACTIONS] };
+      return { ...prev, [resource]: current.length === available.length ? [] : [...available] };
     });
   };
 
@@ -132,25 +139,33 @@ export default function RoleEditor({ roleId }: RoleEditorProps) {
   const permColumns = [
     {
       title: '资源', dataIndex: 'resource', key: 'resource', width: 200,
-      render: (v: string) => (
+      render: (v: string) => {
+        const available = getActionsForResource(v);
+        const current = permissions[v] || [];
+        return (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Checkbox
-            checked={(permissions[v] || []).length === ACTIONS.length}
-            indeterminate={(permissions[v] || []).length > 0 && (permissions[v] || []).length < ACTIONS.length}
+            checked={current.length === available.length}
+            indeterminate={current.length > 0 && current.length < available.length}
             onChange={() => toggleAllForResource(v)}
           />
           <span style={{ fontWeight: 500, fontSize: 13 }}>{v}</span>
         </div>
-      ),
+      );
+      },
     },
-    ...ACTIONS.map(action => ({
+    ...ALL_ACTIONS.map(action => ({
       title: action, key: action, width: 80, align: 'center' as const,
-      render: (_: any, record: { resource: string }) => (
-        <Checkbox
-          checked={(permissions[record.resource] || []).includes(action)}
-          onChange={() => toggleAction(record.resource, action)}
-        />
-      ),
+      render: (_: any, record: { resource: string }) => {
+        const available = getActionsForResource(record.resource);
+        if (!available.includes(action)) return <span style={{ color: '#d9d9d9' }}>—</span>;
+        return (
+          <Checkbox
+            checked={(permissions[record.resource] || []).includes(action)}
+            onChange={() => toggleAction(record.resource, action)}
+          />
+        );
+      },
     })),
   ];
 
